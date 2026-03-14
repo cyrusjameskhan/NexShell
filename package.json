@@ -78,7 +78,8 @@
         }
       ],
       "icon": "icon.ico",
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "sign": false
     },
     "nsis": {
       "oneClick": false,
@@ -89,6 +90,15 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "NexShell"
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ],
+      "icon": "icon.png",
+      "category": "Utility",
+      "executableName": "nexshell"
     },
     "publish": null
   }
