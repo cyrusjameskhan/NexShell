@@ -6,10 +6,11 @@ contextBridge.exposeInMainWorld('api', {
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),
   isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  setOpacity: (opacity: number) => ipcRenderer.invoke('window:setOpacity', opacity),
 
   // PTY
-  createPty: (sessionId: string, cols: number, rows: number) =>
-    ipcRenderer.invoke('pty:create', sessionId, cols, rows),
+  createPty: (sessionId: string, cols: number, rows: number, sessionName?: string) =>
+    ipcRenderer.invoke('pty:create', sessionId, cols, rows, sessionName),
   writePty: (sessionId: string, data: string) => ipcRenderer.send('pty:write', sessionId, data),
   resizePty: (sessionId: string, cols: number, rows: number) =>
     ipcRenderer.send('pty:resize', sessionId, cols, rows),
@@ -57,11 +58,17 @@ contextBridge.exposeInMainWorld('api', {
   // SSH Keys
   getKeys: () => ipcRenderer.invoke('keys:get'),
   setKeys: (keys: any[]) => ipcRenderer.invoke('keys:set', keys),
+  generateKey: (opts: { type: string; bits: number; filename: string; comment: string; passphrase: string }) =>
+    ipcRenderer.invoke('keys:generate', opts),
 
   // Environment Variables
   getVariables: () => ipcRenderer.invoke('variables:get'),
   setVariables: (vars: any[]) => ipcRenderer.invoke('variables:set', vars),
   openSystemVariables: () => ipcRenderer.invoke('variables:openSystem'),
+
+  // Snippets
+  getSnippets: () => ipcRenderer.invoke('snippets:get'),
+  setSnippets: (snippets: any[]) => ipcRenderer.invoke('snippets:set', snippets),
 
   // SFTP
   sftpConnect: (opts: any) => ipcRenderer.invoke('sftp:connect', opts),
@@ -86,4 +93,15 @@ contextBridge.exposeInMainWorld('api', {
 
   // Shell
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+
+  // Session Logs
+  getLogs: () => ipcRenderer.invoke('logs:get'),
+  addLog: (log: any) => ipcRenderer.invoke('logs:add', log),
+  deleteLog: (id: string) => ipcRenderer.invoke('logs:delete', id),
+  clearLogs: () => ipcRenderer.invoke('logs:clear'),
+  onLogAdded: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('logs:added', handler)
+    return () => ipcRenderer.removeListener('logs:added', handler)
+  },
 })

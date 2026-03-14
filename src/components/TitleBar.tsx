@@ -31,7 +31,18 @@ export default function TitleBar() {
       } as any}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <img src={logo} alt="NexShell" style={{ width: 18, height: 18, objectFit: 'contain', opacity: 0.9 }} />
+        <div style={{
+          width: 18, height: 18, flexShrink: 0, opacity: 0.9,
+          background: ui.text,
+          maskImage: `url(${logo})`,
+          maskSize: 'contain',
+          maskRepeat: 'no-repeat',
+          maskPosition: 'center',
+          WebkitMaskImage: `url(${logo})`,
+          WebkitMaskSize: 'contain',
+          WebkitMaskRepeat: 'no-repeat',
+          WebkitMaskPosition: 'center',
+        }} />
         <span style={{ fontSize: 13, fontWeight: 600, color: ui.text, letterSpacing: 0.5 }}>
           NexShell
         </span>

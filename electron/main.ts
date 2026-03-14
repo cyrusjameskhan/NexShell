@@ -74,6 +74,9 @@ ipcMain.on('window:maximize', () => {
 })
 ipcMain.on('window:close', () => mainWindow?.close())
 ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
+ipcMain.handle('window:setOpacity', (_event, opacity: number) => {
+  if (mainWindow) mainWindow.setOpacity(Math.max(0.1, Math.min(1, opacity)))
+})
 
 
 // ── PTY Management ──
@@ -82,15 +85,50 @@ import * as pty from 'node-pty'
 interface PtySession {
   process: pty.IPty
   history: string[]
+  sessionName: string
+  startedAt: number
+  shell: string
+  outputTail: string
 }
 
 const sessions = new Map<string, PtySession>()
+
+function stripAnsiMain(s: string): string {
+  return s
+    .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
+    .replace(/\x1b\[[0-9;?]*[~@]/g, '')
+    .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '')
+    .replace(/\x1b[()][0-9A-Z]/g, '')
+    .replace(/\x1b[^[\]()][A-Z0-9]?/g, '')
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+}
+
+function writeSessionLog(sessionId: string, session: PtySession, exitCode: number | null) {
+  try {
+    const logs = loadLogs()
+    logs.push({
+      id: `log-${sessionId}-${Date.now()}`,
+      sessionName: session.sessionName,
+      startedAt: session.startedAt,
+      endedAt: Date.now(),
+      exitCode,
+      outputTail: session.outputTail,
+      shell: session.shell,
+    })
+    saveLogs(logs)
+    mainWindow?.webContents.send('logs:added')
+  } catch (e) {
+    console.error('[Logs] writeSessionLog failed:', e)
+  }
+}
 
 function getShell(): string {
   return process.platform === 'win32' ? 'powershell.exe' : (process.env.SHELL || '/bin/bash')
 }
 
-ipcMain.handle('pty:create', (_event, sessionId: string, cols = 120, rows = 30) => {
+ipcMain.handle('pty:create', (_event, sessionId: string, cols = 120, rows = 30, sessionName = 'Shell Session') => {
   const shell = getShell()
 
   const userVars = loadVariables()
@@ -110,15 +148,33 @@ ipcMain.handle('pty:create', (_event, sessionId: string, cols = 120, rows = 30) 
   sessions.set(sessionId, {
     process: ptyProcess,
     history: [],
+    sessionName,
+    startedAt: Date.now(),
+    shell,
+    outputTail: '',
   })
 
   ptyProcess.onData((data: string) => {
     mainWindow?.webContents.send(`pty:data:${sessionId}`, data)
+    const session = sessions.get(sessionId)
+    if (session) {
+      const clean = stripAnsiMain(data)
+      if (clean.trim()) {
+        session.outputTail += clean
+        if (session.outputTail.length > 4000) {
+          session.outputTail = session.outputTail.slice(-2000)
+        }
+      }
+    }
   })
 
   ptyProcess.onExit(({ exitCode }) => {
     mainWindow?.webContents.send(`pty:exit:${sessionId}`, exitCode)
-    sessions.delete(sessionId)
+    const session = sessions.get(sessionId)
+    if (session) {
+      writeSessionLog(sessionId, session, exitCode ?? null)
+      sessions.delete(sessionId)
+    }
   })
 
   return { pid: ptyProcess.pid }
@@ -141,8 +197,10 @@ ipcMain.on('pty:resize', (_event, sessionId: string, cols: number, rows: number)
 ipcMain.on('pty:kill', (_event, sessionId: string) => {
   const session = sessions.get(sessionId)
   if (session) {
-    session.process.kill()
+    // Write log before killing — onExit fires async and may race with deletion
+    writeSessionLog(sessionId, session, null)
     sessions.delete(sessionId)
+    session.process.kill()
   }
 })
 
@@ -287,6 +345,61 @@ ipcMain.handle('ai:complete', async (_event, prompt: string, context: string, mo
       ? `\nRelevant files: ${relevantFiles.slice(0, 10).join(', ')}`
       : ''
 
+    const nlExamples: { role: string; content: string }[] =
+      process.platform === 'win32'
+        ? [
+            { role: 'user', content: 'list all files modified today' },
+            { role: 'assistant', content: 'Get-ChildItem | Where-Object { $_.LastWriteTime -gt (Get-Date).Date }' },
+            { role: 'user', content: 'kill the process on port 3000' },
+            { role: 'assistant', content: 'netstat -ano | findstr :3000 | ForEach-Object { Stop-Process -Id ($_ -split "\\s+")[-1] -Force }' },
+            { role: 'user', content: 'show disk usage of current folder' },
+            { role: 'assistant', content: 'Get-ChildItem -Recurse | Measure-Object -Property Length -Sum | Select-Object Sum' },
+          ]
+        : process.platform === 'darwin'
+        ? [
+            { role: 'user', content: 'list all files modified today' },
+            { role: 'assistant', content: 'find . -maxdepth 1 -newermt "$(date +%Y-%m-%d)" -type f' },
+            { role: 'user', content: 'kill the process on port 3000' },
+            { role: 'assistant', content: 'lsof -ti :3000 | xargs kill -9' },
+            { role: 'user', content: 'show disk usage of current folder' },
+            { role: 'assistant', content: 'du -sh *' },
+          ]
+        : [
+            { role: 'user', content: 'list all files modified today' },
+            { role: 'assistant', content: 'find . -maxdepth 1 -newermt "$(date +%Y-%m-%d)" -type f' },
+            { role: 'user', content: 'kill the process on port 3000' },
+            { role: 'assistant', content: 'fuser -k 3000/tcp' },
+            { role: 'user', content: 'show disk usage of current folder' },
+            { role: 'assistant', content: 'du -sh *' },
+          ]
+
+    const autocompleteExamples: { role: string; content: string }[] =
+      process.platform === 'win32'
+        ? [
+            { role: 'user', content: 'Partial: git st' },
+            { role: 'assistant', content: 'git status' },
+            { role: 'user', content: 'Partial: git che' },
+            { role: 'assistant', content: 'git checkout' },
+            { role: 'user', content: 'Partial: npm i' },
+            { role: 'assistant', content: 'npm install' },
+            { role: 'user', content: 'Partial: mkd' },
+            { role: 'assistant', content: 'mkdir' },
+            { role: 'user', content: 'Partial: Get-Ch' },
+            { role: 'assistant', content: 'Get-ChildItem' },
+          ]
+        : [
+            { role: 'user', content: 'Partial: git st' },
+            { role: 'assistant', content: 'git status' },
+            { role: 'user', content: 'Partial: git che' },
+            { role: 'assistant', content: 'git checkout' },
+            { role: 'user', content: 'Partial: npm i' },
+            { role: 'assistant', content: 'npm install' },
+            { role: 'user', content: 'Partial: mkd' },
+            { role: 'assistant', content: 'mkdir' },
+            { role: 'user', content: 'Partial: ls -' },
+            { role: 'assistant', content: 'ls -la' },
+          ]
+
     const messages = nlMode
       ? [
           {
@@ -297,12 +410,7 @@ ipcMain.handle('ai:complete', async (_event, prompt: string, context: string, mo
               'Output ONLY the shell command, nothing else. No explanation. No markdown. One line.' +
               ctxBlock,
           },
-          { role: 'user', content: 'list all files modified today' },
-          { role: 'assistant', content: 'Get-ChildItem | Where-Object { $_.LastWriteTime -gt (Get-Date).Date }' },
-          { role: 'user', content: 'kill the process on port 3000' },
-          { role: 'assistant', content: 'netstat -ano | findstr :3000 | ForEach-Object { Stop-Process -Id ($_ -split "\\s+")[-1] -Force }' },
-          { role: 'user', content: 'show disk usage of current folder' },
-          { role: 'assistant', content: 'Get-ChildItem -Recurse | Measure-Object -Property Length -Sum | Select-Object Sum' },
+          ...nlExamples,
           { role: 'user', content: prompt },
         ]
       : [
@@ -317,16 +425,7 @@ ipcMain.handle('ai:complete', async (_event, prompt: string, context: string, mo
               fileListHint +
               ctxBlock,
           },
-          { role: 'user', content: 'Partial: git st' },
-          { role: 'assistant', content: 'git status' },
-          { role: 'user', content: 'Partial: git che' },
-          { role: 'assistant', content: 'git checkout' },
-          { role: 'user', content: 'Partial: npm i' },
-          { role: 'assistant', content: 'npm install' },
-          { role: 'user', content: 'Partial: mkd' },
-          { role: 'assistant', content: 'mkdir' },
-          { role: 'user', content: 'Partial: Get-Ch' },
-          { role: 'assistant', content: 'Get-ChildItem' },
+          ...autocompleteExamples,
           ...ctxExample,
           { role: 'user', content: `Partial: ${prompt}` },
         ]
@@ -464,6 +563,31 @@ ipcMain.handle('keys:set', (_event, keys: any[]) => {
   fs.writeFileSync(keysPath, JSON.stringify(keys, null, 2))
 })
 
+// ── SSH Key Generation ──
+ipcMain.handle('keys:generate', (_event, opts: { type: string; bits: number; filename: string; comment: string; passphrase: string }) => {
+  return new Promise((resolve) => {
+    const args = [
+      '-t', opts.type,
+      '-b', String(opts.bits),
+      '-f', opts.filename,
+      '-C', opts.comment || '',
+      '-N', opts.passphrase || '',
+    ]
+    // Ed25519 doesn't use -b
+    if (opts.type === 'ed25519') {
+      const bIdx = args.indexOf('-b')
+      if (bIdx !== -1) args.splice(bIdx, 2)
+    }
+    execFile('ssh-keygen', args, (err, stdout, stderr) => {
+      if (err) {
+        resolve({ success: false, error: stderr || err.message })
+      } else {
+        resolve({ success: true, path: opts.filename })
+      }
+    })
+  })
+})
+
 // ── Environment Variables persistence ──
 const variablesPath = path.join(app.getPath('userData'), 'env-variables.json')
 
@@ -491,6 +615,22 @@ ipcMain.handle('variables:openSystem', () => {
   } else {
     exec('xdg-open ~/.bashrc')
   }
+})
+
+// ── Snippets persistence ──
+const snippetsPath = path.join(app.getPath('userData'), 'snippets.json')
+
+ipcMain.handle('snippets:get', () => {
+  try {
+    if (fs.existsSync(snippetsPath)) {
+      return JSON.parse(fs.readFileSync(snippetsPath, 'utf-8'))
+    }
+  } catch { /* ignore */ }
+  return []
+})
+
+ipcMain.handle('snippets:set', (_event, snippets: any[]) => {
+  fs.writeFileSync(snippetsPath, JSON.stringify(snippets, null, 2))
 })
 
 // ── Sidebar state persistence ──
@@ -694,6 +834,65 @@ ipcMain.handle('local:list', async (_event, dirPath: string) => {
   } catch (err: any) {
     return { error: err.message }
   }
+})
+
+// ── Session Logs persistence ──
+
+interface SessionLog {
+  id: string
+  sessionName: string
+  startedAt: number
+  endedAt: number
+  exitCode: number | null
+  outputTail: string
+  shell: string
+}
+
+const logsPath = path.join(app.getPath('userData'), 'session-logs.json')
+
+function getLogRetention(): number {
+  try {
+    if (fs.existsSync(settingsPath)) {
+      const s = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))
+      const v = s?.logRetention
+      // -1 = unlimited; otherwise a positive number; default 100
+      if (typeof v === 'number') return v
+    }
+  } catch { /* ignore */ }
+  return 100
+}
+
+function loadLogs(): SessionLog[] {
+  try {
+    if (fs.existsSync(logsPath)) {
+      return JSON.parse(fs.readFileSync(logsPath, 'utf-8'))
+    }
+  } catch { /* ignore */ }
+  return []
+}
+
+function saveLogs(logs: SessionLog[]) {
+  const retention = getLogRetention()
+  const trimmed = retention === -1 ? logs : logs.slice(-retention)
+  fs.writeFileSync(logsPath, JSON.stringify(trimmed, null, 2))
+}
+
+ipcMain.handle('logs:get', () => loadLogs())
+
+ipcMain.handle('logs:add', (_event, log: SessionLog) => {
+  const logs = loadLogs()
+  logs.push(log)
+  saveLogs(logs)
+  mainWindow?.webContents.send('logs:added')
+})
+
+ipcMain.handle('logs:delete', (_event, id: string) => {
+  const logs = loadLogs().filter(l => l.id !== id)
+  fs.writeFileSync(logsPath, JSON.stringify(logs, null, 2))
+})
+
+ipcMain.handle('logs:clear', () => {
+  fs.writeFileSync(logsPath, JSON.stringify([], null, 2))
 })
 
 // ── Libraries: tool detection & install ──

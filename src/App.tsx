@@ -1,6 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useStore } from './hooks'
 import { initStore, createTab, setState, toggleSidePanel } from './store'
+import { themes } from './themes'
+import { TerminalTheme } from './types'
 import TitleBar from './components/TitleBar'
 import TabBar from './components/TabBar'
 import PaneContainer from './components/PaneContainer'
@@ -96,8 +98,138 @@ export default function App() {
   )
 }
 
+function ThemeQuickPicker({ ui, activeTheme, onClose }: { ui: any; activeTheme: TerminalTheme; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose()
+      }
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('mousedown', handleClick)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [onClose])
+
+  const filtered = search.trim()
+    ? themes.filter(t => t.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : themes
+
+  function selectTheme(t: TerminalTheme) {
+    setState({ theme: t })
+    window.api.setTheme(t)
+    onClose()
+  }
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: 'absolute',
+        bottom: 28,
+        right: 0,
+        width: 240,
+        background: ui.bgSecondary,
+        border: `1px solid ${ui.border}`,
+        borderRadius: 8,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+        zIndex: 2000,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <div style={{ padding: '8px 8px 4px' }}>
+        <input
+          autoFocus
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search themes…"
+          style={{
+            width: '100%',
+            boxSizing: 'border-box',
+            background: ui.bgTertiary,
+            border: `1px solid ${ui.border}`,
+            borderRadius: 5,
+            color: ui.text,
+            fontSize: 11,
+            padding: '4px 8px',
+            outline: 'none',
+          }}
+        />
+      </div>
+      <div style={{ overflowY: 'auto', maxHeight: 280, padding: '4px 0' }}>
+        {filtered.map(t => {
+          const isActive = t.id === activeTheme.id
+          return (
+            <button
+              key={t.id}
+              onClick={() => selectTheme(t)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                width: '100%',
+                padding: '6px 12px',
+                background: isActive ? ui.bgTertiary : 'transparent',
+                border: 'none',
+                color: isActive ? ui.accent : ui.text,
+                fontSize: 12,
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'background 0.1s',
+              }}
+              onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = ui.bgTertiary }}
+              onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+            >
+              <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                {[t.colors.red, t.colors.green, t.colors.blue, t.colors.cyan].map((c, i) => (
+                  <div key={i} style={{ width: 8, height: 8, borderRadius: 2, background: c }} />
+                ))}
+              </div>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {t.name}
+              </span>
+              {isActive && (
+                <span style={{ fontSize: 10, color: ui.accent, flexShrink: 0 }}>✓</span>
+              )}
+            </button>
+          )
+        })}
+        {filtered.length === 0 && (
+          <div style={{ padding: '8px 12px', color: ui.textDim, fontSize: 11 }}>No themes found</div>
+        )}
+      </div>
+      <div
+        style={{
+          borderTop: `1px solid ${ui.border}`,
+          padding: '6px 12px',
+          fontSize: 10,
+          color: ui.textDim,
+          cursor: 'pointer',
+        }}
+        onClick={() => { setState({ settingsOpen: true }); onClose() }}
+        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = ui.text }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = ui.textDim }}
+      >
+        Open full settings →
+      </div>
+    </div>
+  )
+}
+
 function StatusBar({ ui, theme }: { ui: any; theme: any }) {
   const { sessions, aiStatus, settings } = useStore()
+  const [pickerOpen, setPickerOpen] = useState(false)
+
   return (
     <div style={{
       height: 24, background: ui.bgSecondary, borderTop: `1px solid ${ui.border}`,
@@ -121,7 +253,30 @@ function StatusBar({ ui, theme }: { ui: any; theme: any }) {
         {aiStatus.available && (
           <span style={{ color: ui.success }}>AI: {settings.aiModel || aiStatus.models[0] || 'connected'}</span>
         )}
-        <span>{theme.name}</span>
+        <div style={{ position: 'relative' }}>
+          <span
+            onClick={() => setPickerOpen(o => !o)}
+            title="Change theme"
+            style={{
+              cursor: 'pointer',
+              color: pickerOpen ? ui.accent : ui.textDim,
+              borderBottom: `1px dotted ${pickerOpen ? ui.accent : ui.border}`,
+              paddingBottom: 1,
+              transition: 'color 0.15s',
+            }}
+            onMouseEnter={e => { if (!pickerOpen) (e.currentTarget as HTMLElement).style.color = ui.text }}
+            onMouseLeave={e => { if (!pickerOpen) (e.currentTarget as HTMLElement).style.color = ui.textDim }}
+          >
+            {theme.name}
+          </span>
+          {pickerOpen && (
+            <ThemeQuickPicker
+              ui={ui}
+              activeTheme={theme}
+              onClose={() => setPickerOpen(false)}
+            />
+          )}
+        </div>
       </div>
     </div>
   )

@@ -178,6 +178,19 @@ export default function SettingsPanel() {
                   style={inputStyle(ui)}
                 />
               </SettingRow>
+
+              <SettingRow label="Log Retention" ui={ui}>
+                <select
+                  value={localSettings.logRetention ?? 100}
+                  onChange={e => save({ logRetention: Number(e.target.value) })}
+                  style={inputStyle(ui)}
+                >
+                  <option value={5}>Last 5 sessions</option>
+                  <option value={10}>Last 10 sessions</option>
+                  <option value={100}>Last 100 sessions</option>
+                  <option value={-1}>Keep forever</option>
+                </select>
+              </SettingRow>
             </div>
           )}
 
@@ -188,6 +201,11 @@ export default function SettingsPanel() {
               selectTheme={selectTheme}
               themeSearch={themeSearch}
               setThemeSearch={setThemeSearch}
+              opacity={localSettings.opacity ?? 1}
+              onOpacityChange={v => {
+                save({ opacity: v })
+                window.api.setOpacity(v)
+              }}
               ui={ui}
             />
           )}
@@ -601,12 +619,14 @@ function Toggle({ value, onChange, ui }: { value: boolean; onChange: (v: boolean
   )
 }
 
-function AppearanceTab({ themes, activeTheme, selectTheme, themeSearch, setThemeSearch, ui }: {
+function AppearanceTab({ themes, activeTheme, selectTheme, themeSearch, setThemeSearch, opacity, onOpacityChange, ui }: {
   themes: TerminalTheme[]
   activeTheme: TerminalTheme
   selectTheme: (t: TerminalTheme) => void
   themeSearch: string
   setThemeSearch: (v: string) => void
+  opacity: number
+  onOpacityChange: (v: number) => void
   ui: any
 }) {
   const filtered = useMemo(() => {
@@ -616,6 +636,23 @@ function AppearanceTab({ themes, activeTheme, selectTheme, themeSearch, setTheme
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <label style={{ fontSize: 13, color: ui.text, fontWeight: 400 }}>Window Opacity</label>
+        <select
+          value={opacity >= 1 ? 'opaque' : opacity >= 0.9 ? 'high' : opacity >= 0.7 ? 'medium' : 'low'}
+          onChange={e => {
+            const map: Record<string, number> = { low: 0.5, medium: 0.7, high: 0.9, opaque: 1 }
+            onOpacityChange(map[e.target.value])
+          }}
+          style={{ ...inputStyle(ui), width: 'auto' }}
+        >
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="opaque">Opaque</option>
+        </select>
+      </div>
+      <div style={{ height: 1, background: ui.border, marginBottom: 4 }} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <label style={{ fontSize: 13, color: ui.textMuted, fontWeight: 500 }}>Theme</label>
         <span style={{ fontSize: 11, color: ui.textDim }}>{filtered.length} / {themes.length}</span>

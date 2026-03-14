@@ -16,6 +16,8 @@ const defaultSettings: AppSettings = {
   aiApiKey: '',
   shell: 'powershell.exe',
   agentCommand: 'claude',
+  logRetention: 100,
+  opacity: 1,
 }
 
 export interface SshConnectionInfo {
@@ -510,11 +512,7 @@ export function resetFontSize() {
 
 // ── Side Panel ────────────────────────────────────────────────────────────────
 export function toggleSidePanel(section: SidePanelSection) {
-  if (state.sidePanelOpen && state.sidePanelSection === section) {
-    setState({ sidePanelOpen: false })
-  } else {
-    setState({ sidePanelOpen: true, sidePanelSection: section })
-  }
+  setState({ sidePanelOpen: true, sidePanelSection: section })
   window.api.setSidebarState({ section: state.sidePanelSection, width: state.sidePanelWidth })
 }
 
@@ -550,11 +548,15 @@ export async function initStore() {
   const [savedTheme, savedSettings, aiStatus, savedSidebar] = await Promise.all([
     window.api.getTheme(), window.api.getSettings(), window.api.aiCheck(), window.api.getSidebarState(),
   ])
+  const mergedSettings = savedSettings ? { ...defaultSettings, ...savedSettings } : defaultSettings
   setState({
     theme: savedTheme || defaultTheme,
-    settings: savedSettings ? { ...defaultSettings, ...savedSettings } : defaultSettings,
+    settings: mergedSettings,
     aiStatus,
     sidePanelWidth: savedSidebar?.width ?? 280,
     sidePanelSection: savedSidebar?.section ?? 'hosts',
   })
+  if (mergedSettings.opacity !== 1) {
+    window.api.setOpacity(mergedSettings.opacity)
+  }
 }

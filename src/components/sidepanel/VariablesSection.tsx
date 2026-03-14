@@ -140,7 +140,7 @@ export default function VariablesSection() {
         </button>
         <button
           onClick={openAdd}
-          style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', fontSize: 11, fontWeight: 500, background: ui.accent, border: 'none', borderRadius: 5, color: '#fff', cursor: 'pointer', flexShrink: 0, transition: 'opacity 0.15s' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', fontSize: 11, fontWeight: 500, background: ui.accent, border: 'none', borderRadius: 5, color: ui.bg, cursor: 'pointer', flexShrink: 0, transition: 'opacity 0.15s' }}
           onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
           onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
         >
@@ -172,7 +172,7 @@ export default function VariablesSection() {
 
       {/* Variable list */}
       <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
-        {filtered.length === 0 && !isAdding ? (
+        {filtered.length === 0 ? (
           <EmptyState ui={ui} hasSearch={!!search} onAdd={openAdd} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -188,7 +188,7 @@ export default function VariablesSection() {
         )}
       </div>
 
-      {/* Add/Edit form */}
+      {/* Add/Edit form modal */}
       {isAdding && (
         <VarForm
           formKey={formKey} formValue={formValue} formSecret={formSecret}
@@ -314,78 +314,83 @@ function VarForm({ formKey, formValue, formSecret, setFormKey, setFormValue, set
   const canSave = key.length > 0 && !isDuplicate && /^[A-Za-z_][A-Za-z0-9_]*$/.test(key)
 
   return (
-    <div style={{
-      borderTop: `1px solid ${ui.border}`, background: ui.bgSecondary,
-      padding: '12px 12px 10px', flexShrink: 0,
-      display: 'flex', flexDirection: 'column', gap: 8,
-      maxHeight: '55%', overflowY: 'auto',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: ui.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20 }}
+      onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
+      <div style={{ background: ui.bgSecondary, border: `1px solid ${ui.border}`, borderRadius: 12, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: 380, maxHeight: '85%', boxShadow: `0 20px 60px rgba(0,0,0,0.4)`, overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 12px', borderBottom: `1px solid ${ui.border}`, flexShrink: 0 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: ui.text }}>
           {editing ? 'Edit Variable' : 'New Variable'}
         </span>
-        <button onClick={onCancel} style={{ background: 'none', border: 'none', color: ui.textDim, cursor: 'pointer', padding: 2, borderRadius: 3 }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
+        <button onClick={onCancel} style={{ background: 'none', border: 'none', color: ui.textDim, cursor: 'pointer', padding: 2, borderRadius: 3 }}
+          onMouseEnter={e => (e.currentTarget.style.color = ui.text)}
+          onMouseLeave={e => (e.currentTarget.style.color = ui.textDim)}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
         </button>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <label style={{ fontSize: 10, fontWeight: 500, color: ui.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Key *</label>
-        <input placeholder="MY_VARIABLE" value={formKey}
-          onChange={e => setFormKey(e.target.value.replace(/\s/g, '_'))}
-          style={{ width: '100%', padding: '5px 8px', fontSize: 12, fontFamily: 'monospace', background: ui.inputBg, border: `1px solid ${isDuplicate ? ui.danger : ui.inputBorder}`, borderRadius: 5, color: ui.text, outline: 'none' }}
-          onFocus={e => (e.currentTarget.style.borderColor = isDuplicate ? ui.danger : ui.inputFocus)}
-          onBlur={e => (e.currentTarget.style.borderColor = isDuplicate ? ui.danger : ui.inputBorder)}
-          autoFocus spellCheck={false}
-        />
-        {isDuplicate && <span style={{ fontSize: 10, color: ui.danger }}>A variable with this key already exists</span>}
-        {key && !canSave && !isDuplicate && <span style={{ fontSize: 10, color: ui.warning }}>Key must start with a letter or underscore, containing only alphanumerics and underscores</span>}
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <label style={{ fontSize: 10, fontWeight: 500, color: ui.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Value</label>
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <input type={formSecret && !showValue ? 'password' : 'text'} placeholder="value" value={formValue}
-            onChange={e => setFormValue(e.target.value)}
-            style={{ width: '100%', padding: '5px 30px 5px 8px', fontSize: 12, fontFamily: 'monospace', background: ui.inputBg, border: `1px solid ${ui.inputBorder}`, borderRadius: 5, color: ui.text, outline: 'none' }}
-            onFocus={e => (e.currentTarget.style.borderColor = ui.inputFocus)}
-            onBlur={e => (e.currentTarget.style.borderColor = ui.inputBorder)}
-            spellCheck={false}
+      {/* Scrollable fields */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <label style={{ fontSize: 10, fontWeight: 500, color: ui.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Key *</label>
+          <input placeholder="MY_VARIABLE" value={formKey}
+            onChange={e => setFormKey(e.target.value.replace(/\s/g, '_'))}
+            style={{ width: '100%', padding: '5px 8px', fontSize: 12, fontFamily: 'monospace', background: ui.inputBg, border: `1px solid ${isDuplicate ? ui.danger : ui.inputBorder}`, borderRadius: 5, color: ui.text, outline: 'none' }}
+            onFocus={e => (e.currentTarget.style.borderColor = isDuplicate ? ui.danger : ui.inputFocus)}
+            onBlur={e => (e.currentTarget.style.borderColor = isDuplicate ? ui.danger : ui.inputBorder)}
+            autoFocus spellCheck={false}
           />
-          {formSecret && (
-            <button type="button" onClick={() => setShowValue(p => !p)}
-              style={{ position: 'absolute', right: 6, background: 'none', border: 'none', color: ui.textDim, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
-              {showValue ? (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
-              ) : (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-              )}
-            </button>
-          )}
+          {isDuplicate && <span style={{ fontSize: 10, color: ui.danger }}>A variable with this key already exists</span>}
+          {key && !canSave && !isDuplicate && <span style={{ fontSize: 10, color: ui.warning }}>Key must start with a letter or underscore, containing only alphanumerics and underscores</span>}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <label style={{ fontSize: 10, fontWeight: 500, color: ui.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Value</label>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <input type={formSecret && !showValue ? 'password' : 'text'} placeholder="value" value={formValue}
+              onChange={e => setFormValue(e.target.value)}
+              style={{ width: '100%', padding: '5px 30px 5px 8px', fontSize: 12, fontFamily: 'monospace', background: ui.inputBg, border: `1px solid ${ui.inputBorder}`, borderRadius: 5, color: ui.text, outline: 'none' }}
+              onFocus={e => (e.currentTarget.style.borderColor = ui.inputFocus)}
+              onBlur={e => (e.currentTarget.style.borderColor = ui.inputBorder)}
+              spellCheck={false}
+            />
+            {formSecret && (
+              <button type="button" onClick={() => setShowValue(p => !p)}
+                style={{ position: 'absolute', right: 6, background: 'none', border: 'none', color: ui.textDim, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
+                {showValue ? (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+                ) : (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => { setFormSecret(!formSecret); if (formSecret) setShowValue(true) }}
+            style={{ width: 28, height: 16, borderRadius: 8, background: formSecret ? ui.accent : ui.bgTertiary, border: `1px solid ${formSecret ? ui.accent : ui.border}`, cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s', padding: 0 }}>
+            <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#fff', position: 'absolute', top: 1, left: formSecret ? 14 : 1, transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.3)' }} />
+          </button>
+          <span style={{ fontSize: 11, color: ui.textMuted }}>Mark as secret</span>
+          <Tooltip text="Masks the value in the UI. The variable is still passed to terminal sessions." ui={ui}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={ui.textDim} strokeWidth="2" style={{ cursor: 'default' }}>
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+          </Tooltip>
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button onClick={() => { setFormSecret(!formSecret); if (formSecret) setShowValue(true) }}
-          style={{ width: 28, height: 16, borderRadius: 8, background: formSecret ? ui.accent : ui.bgTertiary, border: `1px solid ${formSecret ? ui.accent : ui.border}`, cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s', padding: 0 }}>
-          <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#fff', position: 'absolute', top: 1, left: formSecret ? 14 : 1, transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.3)' }} />
-        </button>
-        <span style={{ fontSize: 11, color: ui.textMuted }}>Mark as secret</span>
-        <Tooltip text="Masks the value in the UI. The variable is still passed to terminal sessions." ui={ui}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={ui.textDim} strokeWidth="2" style={{ cursor: 'default' }}>
-            <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
-          </svg>
-        </Tooltip>
-      </div>
-
-      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 2 }}>
-        <button onClick={onCancel} style={{ padding: '5px 12px', fontSize: 12, background: ui.bgTertiary, border: `1px solid ${ui.border}`, borderRadius: 5, color: ui.textMuted, cursor: 'pointer' }}>Cancel</button>
+      {/* Footer */}
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 16px', borderTop: `1px solid ${ui.border}`, flexShrink: 0 }}>
+        <button onClick={onCancel} style={{ padding: '6px 14px', fontSize: 12, background: ui.bgTertiary, border: `1px solid ${ui.border}`, borderRadius: 6, color: ui.textMuted, cursor: 'pointer' }}>Cancel</button>
         <button onClick={onSave} disabled={!canSave}
-          style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: canSave ? ui.accent : ui.bgTertiary, border: 'none', borderRadius: 5, color: canSave ? '#fff' : ui.textDim, cursor: canSave ? 'pointer' : 'not-allowed' }}
+          style={{ padding: '6px 14px', fontSize: 12, fontWeight: 500, background: canSave ? ui.accent : ui.bgTertiary, border: 'none', borderRadius: 6, color: canSave ? ui.bg : ui.textDim, cursor: canSave ? 'pointer' : 'not-allowed' }}
           onMouseEnter={e => canSave && ((e.currentTarget as HTMLButtonElement).style.opacity = '0.85')}
           onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}>
           {editing ? 'Save Changes' : 'Add Variable'}
         </button>
+      </div>
       </div>
     </div>
   )
@@ -416,7 +421,7 @@ function ImportOverlay({ ui, text, setText, onImport, onCancel }: {
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} style={{ padding: '5px 12px', fontSize: 12, background: ui.bgTertiary, border: `1px solid ${ui.border}`, borderRadius: 5, color: ui.textMuted, cursor: 'pointer' }}>Cancel</button>
           <button onClick={() => onImport(text)} disabled={lineCount === 0}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: lineCount > 0 ? ui.accent : ui.bgTertiary, border: 'none', borderRadius: 5, color: lineCount > 0 ? '#fff' : ui.textDim, cursor: lineCount > 0 ? 'pointer' : 'not-allowed' }}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: lineCount > 0 ? ui.accent : ui.bgTertiary, border: 'none', borderRadius: 5, color: lineCount > 0 ? ui.bg : ui.textDim, cursor: lineCount > 0 ? 'pointer' : 'not-allowed' }}
             onMouseEnter={e => lineCount > 0 && ((e.currentTarget as HTMLButtonElement).style.opacity = '0.85')}
             onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}>
             Import {lineCount > 0 ? `(${lineCount})` : ''}
@@ -467,7 +472,7 @@ function EmptyState({ ui, hasSearch, onAdd }: { ui: any; hasSearch: boolean; onA
               display: 'flex', alignItems: 'center', gap: 5,
               padding: '6px 14px', fontSize: 12, fontWeight: 500,
               background: ui.accent, border: 'none', borderRadius: 6,
-              color: '#fff', cursor: 'pointer', transition: 'opacity 0.15s',
+              color: ui.bg, cursor: 'pointer', transition: 'opacity 0.15s',
             }}
             onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
             onMouseLeave={e => (e.currentTarget.style.opacity = '1')}

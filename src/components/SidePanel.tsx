@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useStore } from '../hooks'
-import { setState, toggleSidePanel } from '../store'
+import { setState } from '../store'
 import { SidePanelSection } from '../types'
 import IconRail from './IconRail'
 import HostsSection from './sidepanel/HostsSection'
@@ -84,7 +84,7 @@ export default function SidePanel() {
             {SECTION_LABELS[sidePanelSection]}
           </span>
           <button
-            onClick={() => toggleSidePanel(sidePanelSection)}
+            onClick={() => setState({ sidePanelOpen: false })}
             title="Close panel (Ctrl+B)"
             style={{
               width: 26,

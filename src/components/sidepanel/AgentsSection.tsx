@@ -969,7 +969,7 @@ function CategoryPill({ label, active, onClick, ui }: { label: string; active: b
         background: active ? ui.accent : ui.bgTertiary,
         border: `1px solid ${active ? ui.accent : ui.border}`,
         borderRadius: 10,
-        color: active ? '#fff' : ui.textMuted,
+        color: active ? ui.bg : ui.textMuted,
         cursor: 'pointer',
         transition: 'all 0.15s',
       }}
@@ -983,7 +983,7 @@ function CategoryPill({ label, active, onClick, ui }: { label: string; active: b
 
 function SmallBtn({ label, ui, onClick, accent, danger, title }: { label: string; ui: any; onClick: () => void; accent?: boolean; danger?: boolean; title?: string }) {
   const bg = accent ? ui.accent : danger ? `${ui.danger}22` : ui.bgTertiary
-  const color = accent ? '#fff' : danger ? ui.danger : ui.textMuted
+  const color = accent ? ui.bg : danger ? ui.danger : ui.textMuted
   return (
     <button
       onClick={onClick}
@@ -1002,7 +1002,7 @@ function overlayBtnStyle(ui: any, primary: boolean): React.CSSProperties {
     flex: 1, padding: '7px 12px', fontSize: 12, fontWeight: primary ? 600 : 400,
     background: primary ? ui.accent : ui.bgTertiary,
     border: primary ? 'none' : `1px solid ${ui.border}`,
-    borderRadius: 6, color: primary ? '#fff' : ui.textMuted,
+    borderRadius: 6, color: primary ? ui.bg : ui.textMuted,
     cursor: 'pointer', transition: 'opacity 0.15s',
   }
 }

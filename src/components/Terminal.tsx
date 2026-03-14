@@ -6,8 +6,8 @@ import { SearchAddon } from '@xterm/addon-search'
 import { CanvasAddon } from '@xterm/addon-canvas'
 import '@xterm/xterm/css/xterm.css'
 import { useStore } from '../hooks'
-import { zoomFontSize, resetFontSize, createTab } from '../store'
-import { TerminalTheme } from '../types'
+import { zoomFontSize, resetFontSize, createTab, getState } from '../store'
+import { Snippet, TerminalTheme } from '../types'
 
 interface Props {
   sessionId: string
@@ -55,7 +55,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
   const zoomTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
   // Context menu state
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; selectedText: string; clipboardText: string } | null>(null)
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; selectedText: string; clipboardText: string; snippets: Snippet[] } | null>(null)
   // Agent prompt state
   const [agentPromptOpen, setAgentPromptOpen] = useState(false)
   const [agentSelectedText, setAgentSelectedText] = useState('')
@@ -314,7 +314,8 @@ export default function TerminalView({ sessionId, isActive }: Props) {
       ptyStarted = true
       startObserver.disconnect()
       fitAddon.fit()
-      window.api.createPty(sessionId, term.cols, term.rows)
+      const sessionName = getState().sessions.find(s => s.id === sessionId)?.name ?? 'Shell Session'
+      window.api.createPty(sessionId, term.cols, term.rows, sessionName)
     })
     startObserver.observe(containerRef.current)
 
@@ -410,10 +411,11 @@ export default function TerminalView({ sessionId, isActive }: Props) {
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault()
       const selected = term.getSelection()
-      navigator.clipboard.readText().catch(() => '').then(clipboardText => {
-        // Only show if there's something useful: selected text OR clipboard content
-        if (!selected && !clipboardText) return
-        setCtxMenu({ x: e.clientX, y: e.clientY, selectedText: selected, clipboardText })
+      Promise.all([
+        navigator.clipboard.readText().catch(() => ''),
+        window.api.getSnippets().catch(() => [] as Snippet[]),
+      ]).then(([clipboardText, snippets]) => {
+        setCtxMenu({ x: e.clientX, y: e.clientY, selectedText: selected, clipboardText, snippets })
       })
     }
     containerRef.current.addEventListener('contextmenu', onContextMenu)
@@ -581,6 +583,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
           y={ctxMenu.y}
           selectedText={ctxMenu.selectedText}
           clipboardText={ctxMenu.clipboardText}
+          snippets={ctxMenu.snippets}
           onClose={() => setCtxMenu(null)}
           onCopy={() => {
             navigator.clipboard.writeText(ctxMenu.selectedText).catch(() => {})
@@ -588,6 +591,10 @@ export default function TerminalView({ sessionId, isActive }: Props) {
           }}
           onPaste={() => {
             window.api.writePty(sessionId, ctxMenu.clipboardText)
+            setCtxMenu(null)
+          }}
+          onPasteSnippet={cmd => {
+            window.api.writePty(sessionId, cmd)
             setCtxMenu(null)
           }}
           onSendToAgent={() => openAgentPrompt(ctxMenu.selectedText)}
@@ -633,7 +640,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
               fontSize: 11, color: theme.ui.textDim,
             }}>
               <span style={{ color: theme.ui.accent, fontWeight: 600 }}>Agent</span>
-              <span>What do you want to ask about the selected text? Press Enter to open a new shell.</span>
+              <span>{agentSelectedText ? 'What do you want to ask about the selected text? Press Enter to open a new shell.' : 'Ask the agent anything. Press Enter to open a new shell.'}</span>
             </div>
 
             {/* Selected text preview */}
@@ -671,7 +678,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
                     xtermRef.current?.focus()
                   }
                 }}
-                placeholder={`Ask ${settings.agentCommand || 'claude'} about this…`}
+                placeholder={agentSelectedText ? `Ask ${settings.agentCommand || 'claude'} about this…` : `Ask ${settings.agentCommand || 'claude'} anything…`}
                 style={{
                   flex: 1,
                   background: theme.ui.bgTertiary,
@@ -796,18 +803,21 @@ export default function TerminalView({ sessionId, isActive }: Props) {
 }
 
 // ── Context menu ──────────────────────────────────────────────────────────────
-function ContextMenu({ x, y, selectedText, clipboardText, onClose, onCopy, onPaste, onSendToAgent, ui }: {
+function ContextMenu({ x, y, selectedText, clipboardText, snippets, onClose, onCopy, onPaste, onPasteSnippet, onSendToAgent, ui }: {
   x: number
   y: number
   selectedText: string
   clipboardText: string
+  snippets: Snippet[]
   onClose: () => void
   onCopy: () => void
   onPaste: () => void
+  onPasteSnippet: (cmd: string) => void
   onSendToAgent: () => void
   ui: any
 }) {
-  // Close on any outside click
+  const [snippetsOpen, setSnippetsOpen] = useState(false)
+
   useEffect(() => {
     const handler = () => onClose()
     window.addEventListener('mousedown', handler)
@@ -816,13 +826,14 @@ function ContextMenu({ x, y, selectedText, clipboardText, onClose, onCopy, onPas
 
   const hasCopy = !!selectedText
   const hasPaste = !!clipboardText
-  const hasAgent = !!selectedText
+  const hasSnippets = snippets.length > 0
+  const hasAgent = true
 
-  // Estimate height: 32px per item + 4px padding top/bottom + 9px per divider
-  const itemCount = (hasCopy ? 1 : 0) + (hasPaste ? 1 : 0) + (hasAgent ? 1 : 0)
-  const dividers = (hasCopy || hasPaste) && hasAgent ? 1 : 0
-  const menuHeight = itemCount * 32 + 8 + dividers * 9
   const menuWidth = 180
+  // Estimate height to keep menu on screen
+  const itemCount = (hasCopy ? 1 : 0) + (hasPaste ? 1 : 0) + (hasSnippets ? 1 : 0) + 1
+  const dividers = (hasCopy || hasPaste || hasSnippets) ? 1 : 0
+  const menuHeight = itemCount * 32 + 8 + dividers * 9
   const cx = Math.min(x, window.innerWidth - menuWidth - 8)
   const cy = Math.min(y, window.innerHeight - menuHeight - 8)
 
@@ -839,17 +850,193 @@ function ContextMenu({ x, y, selectedText, clipboardText, onClose, onCopy, onPas
         borderRadius: 8,
         boxShadow: `0 4px 20px ${ui.shadow ?? 'rgba(0,0,0,0.4)'}`,
         zIndex: 9999,
-        overflow: 'hidden',
+        overflow: 'visible',
         padding: '4px 0',
       }}
     >
       {hasCopy && <CtxItem label="Copy" icon="copy" onClick={onCopy} ui={ui} />}
       {hasPaste && <CtxItem label="Paste" icon="paste" onClick={onPaste} ui={ui} />}
-      {(hasCopy || hasPaste) && hasAgent && (
+      {hasSnippets && (
+        <CtxItemSnippets
+          ui={ui}
+          snippets={snippets}
+          open={snippetsOpen}
+          menuX={cx}
+          menuWidth={menuWidth}
+          onToggle={() => setSnippetsOpen(o => !o)}
+          onSelect={cmd => { onPasteSnippet(cmd) }}
+        />
+      )}
+      {(hasCopy || hasPaste || hasSnippets) && hasAgent && (
         <div style={{ height: 1, background: ui.border, margin: '4px 0' }} />
       )}
-      {hasAgent && <CtxItem label="Send to Agent" icon="agent" onClick={onSendToAgent} ui={ui} accent />}
+      {hasAgent && <CtxItem label="Ask Agent" icon="agent" onClick={onSendToAgent} ui={ui} accent />}
     </div>
+  )
+}
+
+// ── Snippets submenu item ──────────────────────────────────────────────────────
+function CtxItemSnippets({ ui, snippets, open, menuX, menuWidth, onToggle, onSelect }: {
+  ui: any
+  snippets: Snippet[]
+  open: boolean
+  menuX: number
+  menuWidth: number
+  onToggle: () => void
+  onSelect: (cmd: string) => void
+}) {
+  const [hovered, setHovered] = useState(false)
+  const [search, setSearch] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (open) setTimeout(() => searchRef.current?.focus(), 20)
+    else setSearch('')
+  }, [open])
+
+  const filtered = search.trim()
+    ? snippets.filter(s =>
+        s.name.toLowerCase().includes(search.toLowerCase()) ||
+        s.command.toLowerCase().includes(search.toLowerCase()) ||
+        (s.description ?? '').toLowerCase().includes(search.toLowerCase())
+      )
+    : snippets
+
+  // Position submenu: prefer right side, flip left if not enough space
+  const submenuWidth = 240
+  const spaceRight = window.innerWidth - (menuX + menuWidth)
+  const submenuLeft = spaceRight >= submenuWidth + 4 ? menuWidth - 1 : -(submenuWidth - 1)
+
+  return (
+    <div
+      style={{ position: 'relative' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <button
+        onClick={onToggle}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          width: '100%',
+          padding: '7px 12px',
+          background: open || hovered ? ui.bgTertiary : 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          color: open || hovered ? ui.text : ui.textMuted,
+          fontSize: 12,
+          textAlign: 'left',
+          transition: 'background 0.1s, color 0.1s',
+        }}
+      >
+        {/* Code brackets icon */}
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
+        </svg>
+        <span style={{ flex: 1 }}>Snippets</span>
+      </button>
+
+      {open && (
+        <div
+          onMouseDown={e => e.stopPropagation()}
+          style={{
+            position: 'absolute',
+            top: -4,
+            left: submenuLeft,
+            width: submenuWidth,
+            background: ui.bgSecondary,
+            border: `1px solid ${ui.border}`,
+            borderRadius: 8,
+            boxShadow: `0 6px 24px ${ui.shadow ?? 'rgba(0,0,0,0.5)'}`,
+            zIndex: 10000,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Search */}
+          <div style={{ padding: '7px 8px 5px', borderBottom: `1px solid ${ui.border}`, flexShrink: 0 }}>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <svg style={{ position: 'absolute', left: 7, pointerEvents: 'none', color: ui.textDim }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                ref={searchRef}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') { e.stopPropagation(); setSearch('') }
+                  // Enter on first result
+                  if (e.key === 'Enter' && filtered.length > 0) onSelect(filtered[0].command)
+                }}
+                placeholder="Search snippets…"
+                style={{
+                  width: '100%',
+                  padding: '4px 8px 4px 24px',
+                  fontSize: 11,
+                  background: ui.inputBg,
+                  border: `1px solid ${ui.inputBorder}`,
+                  borderRadius: 5,
+                  color: ui.text,
+                  outline: 'none',
+                }}
+                onFocus={e => (e.currentTarget.style.borderColor = ui.inputFocus)}
+                onBlur={e => (e.currentTarget.style.borderColor = ui.inputBorder)}
+              />
+            </div>
+          </div>
+
+          {/* Snippet list */}
+          <div style={{ overflowY: 'auto', maxHeight: 220 }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '10px 12px', fontSize: 11, color: ui.textDim, textAlign: 'center' }}>
+                No snippets match
+              </div>
+            ) : (
+              filtered.map(s => (
+                <SnippetSubItem key={s.id} snippet={s} ui={ui} onSelect={() => onSelect(s.command)} />
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SnippetSubItem({ snippet, ui, onSelect }: { snippet: Snippet; ui: any; onSelect: () => void }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <button
+      onClick={onSelect}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 2,
+        width: '100%',
+        padding: '7px 12px',
+        background: hovered ? ui.bgTertiary : 'transparent',
+        border: 'none',
+        cursor: 'pointer',
+        textAlign: 'left',
+        transition: 'background 0.1s',
+      }}
+    >
+      <span style={{ fontSize: 12, fontWeight: 500, color: hovered ? ui.text : ui.textMuted, lineHeight: 1.2 }}>
+        {snippet.name}
+      </span>
+      <span style={{
+        fontSize: 11, fontFamily: 'monospace', color: ui.textDim,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        maxWidth: '100%',
+      }}>
+        {snippet.command}
+      </span>
+    </button>
   )
 }
 
@@ -892,10 +1079,8 @@ function CtxItem({ label, icon, onClick, ui, accent }: {
           <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
         </svg>
       ) : (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2a10 10 0 1 0 10 10" />
-          <path d="M12 8v4l3 3" />
-          <path d="M18 2v6h6" />
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <path d="M12 2 C12 2 13.5 8.5 22 12 C13.5 15.5 12 22 12 22 C12 22 10.5 15.5 2 12 C10.5 8.5 12 2 12 2Z" />
         </svg>
       )}
       {label}

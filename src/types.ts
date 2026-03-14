@@ -90,9 +90,24 @@ export interface AppSettings {
   aiApiKey: string
   shell: string
   agentCommand: string
+  /** Max number of session logs to keep. -1 = unlimited */
+  logRetention: number
+  /** Window opacity 0.1–1.0 */
+  opacity: number
 }
 
 export type SidePanelSection = 'hosts' | 'agents' | 'variables' | 'snippets' | 'logs' | 'libraries'
+
+export interface SessionLog {
+  id: string
+  sessionName: string
+  startedAt: number
+  endedAt: number
+  exitCode: number | null
+  /** ANSI-stripped output tail (last ~2KB) */
+  outputTail: string
+  shell: string
+}
 
 export interface LibraryTool {
   id: string
@@ -106,6 +121,8 @@ export interface LibraryTool {
   homepage?: string
 }
 
+export type SshHostOs = 'linux' | 'ubuntu' | 'debian' | 'centos' | 'fedora' | 'alpine' | 'arch' | 'macos' | 'freebsd' | 'windows' | 'redhat' | 'raspberrypi'
+
 export interface SshHost {
   id: string
   label: string
@@ -117,6 +134,7 @@ export interface SshHost {
   tags?: string[]
   lastConnected?: number
   notes?: string
+  detectedOs?: SshHostOs
 }
 
 export interface SshKey {
@@ -137,6 +155,16 @@ export interface EnvVariable {
   value: string
   enabled: boolean
   secret: boolean
+}
+
+export interface Snippet {
+  id: string
+  name: string
+  command: string
+  description?: string
+  tags?: string[]
+  createdAt: number
+  updatedAt: number
 }
 
 export interface SftpEntry {
@@ -162,7 +190,7 @@ declare global {
       maximize: () => void
       close: () => void
       isMaximized: () => Promise<boolean>
-      createPty: (sessionId: string, cols: number, rows: number) => Promise<{ pid: number } | void>
+      createPty: (sessionId: string, cols: number, rows: number, sessionName?: string) => Promise<{ pid: number } | void>
       writePty: (sessionId: string, data: string) => void
       resizePty: (sessionId: string, cols: number, rows: number) => void
       killPty: (sessionId: string) => void
@@ -178,15 +206,19 @@ declare global {
       setTheme: (theme: TerminalTheme) => Promise<void>
       getSettings: () => Promise<AppSettings | null>
       setSettings: (settings: AppSettings) => Promise<void>
+      setOpacity: (opacity: number) => Promise<void>
       getSidebarState: () => Promise<{ section: SidePanelSection | null; width: number } | null>
       setSidebarState: (state: { section: SidePanelSection | null; width: number }) => Promise<void>
       getHosts: () => Promise<SshHost[]>
       setHosts: (hosts: SshHost[]) => Promise<void>
       getKeys: () => Promise<SshKey[]>
       setKeys: (keys: SshKey[]) => Promise<void>
+      generateKey: (opts: { type: string; bits: number; filename: string; comment: string; passphrase: string }) => Promise<{ success: true; path: string } | { success: false; error: string }>
       getVariables: () => Promise<EnvVariable[]>
       setVariables: (vars: EnvVariable[]) => Promise<void>
       openSystemVariables: () => Promise<void>
+      getSnippets: () => Promise<Snippet[]>
+      setSnippets: (snippets: Snippet[]) => Promise<void>
       sftpConnect: (opts: SftpConnectOpts) => Promise<{ id: string } | { error: string }>
       sftpDisconnect: (id: string) => Promise<void>
       sftpList: (id: string, remotePath: string) => Promise<SftpEntry[] | { error: string }>
@@ -200,11 +232,16 @@ declare global {
       localRename: (oldPath: string, newPath: string) => Promise<{ ok: true } | { error: string }>
       localDelete: (filePath: string) => Promise<{ ok: true } | { error: string }>
       localMkdir: (dirPath: string) => Promise<{ ok: true } | { error: string }>
-      showOpenDialog: (options: { properties: string[]; defaultPath?: string }) => Promise<string[] | null>
-      showSaveDialog: (options: { defaultPath?: string }) => Promise<string | null>
+      showOpenDialog: (options: { properties: string[]; defaultPath?: string; title?: string }) => Promise<string[] | null>
+      showSaveDialog: (options: { defaultPath?: string; title?: string }) => Promise<string | null>
       checkTool: (cmd: string) => Promise<{ installed: boolean; version: string | null }>
       installTool: (sessionId: string, cmd: string) => Promise<void>
       openExternal: (url: string) => Promise<void>
+      getLogs: () => Promise<SessionLog[]>
+      addLog: (log: SessionLog) => Promise<void>
+      deleteLog: (id: string) => Promise<void>
+      clearLogs: () => Promise<void>
+      onLogAdded: (callback: () => void) => () => void
     }
   }
 }

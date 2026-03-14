@@ -1,6 +1,6 @@
 # NexShell
 
-A sleek, local-first terminal emulator with AI autocomplete, split panes, SSH/SFTP, and a built-in AI agents catalog. Think Termius, but for local shells — free and open source.
+A sleek, local-first terminal emulator with AI autocomplete, split panes, SSH/SFTP, and a built-in AI agents catalog. Works with PowerShell, bash, zsh, and any shell your OS provides — free and open source.
 
 ## Features
 
@@ -8,7 +8,7 @@ A sleek, local-first terminal emulator with AI autocomplete, split panes, SSH/SF
 - **Split Panes** — Horizontal and vertical splits with drag-and-drop rearrangement.
 - **17 Built-in Themes** — Midnight, Ocean, Nord, Monokai Pro, Dracula, Solarized Dark, Matrix, Red Hacker, Cyberpunk Blue, Deep Purple, Synthwave, Catppuccin Mocha, Tokyo Night, Gruvbox Dark, One Dark Pro, Rosé Pine, Ayu Dark, Light.
 - **Enhanced History** — Ctrl+R fuzzy search across all past commands, persisted to disk (up to 5,000 entries).
-- **Multi-tab Sessions** — Ctrl+Shift+T for new tabs. Each tab runs its own independent shell process.
+- **Multi-tab Sessions** — Ctrl+Shift+T for new tabs. Each tab runs its own independent shell process (PowerShell on Windows, zsh/bash on macOS/Linux).
 - **SSH Host Manager** — Save and connect to SSH profiles with password or identity file authentication.
 - **SFTP Client** — Dual-pane SFTP file browser with upload, download, rename, delete, and mkdir support.
 - **SSH Key Manager** — Store references to local key files with fingerprint display.
@@ -60,7 +60,7 @@ You can also point NexShell at any OpenAI-compatible endpoint (LM Studio, etc.) 
 - **Electron** — Desktop app shell
 - **React 19 + TypeScript** — UI
 - **xterm.js** — Terminal emulation (same as VS Code)
-- **node-pty** — Shell process management
+- **node-pty** — Cross-platform shell process management
 - **ssh2** — SSH and SFTP
 - **Vite** — Build tooling
 - **Ollama / OpenAI-compatible API** — Local AI inference
@@ -93,4 +93,4 @@ You are free to use, modify, and distribute this software under the terms of the
 
 ## Trademark
 
-"NexShell" is a trademark of Cyrus. You may not use the name "NexShell" to identify forks, derivative products, or commercial offerings without written permission.
+"NexShell" is a trademark of Cyrus James Khan Hauri. You may not use the name "NexShell" to identify forks, derivative products, or commercial offerings without written permission.
