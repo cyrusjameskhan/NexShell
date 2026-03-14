@@ -1,0 +1,886 @@
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { Terminal as XTerm } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import { SearchAddon } from '@xterm/addon-search'
+import { CanvasAddon } from '@xterm/addon-canvas'
+import '@xterm/xterm/css/xterm.css'
+import { useStore } from '../hooks'
+import { zoomFontSize, resetFontSize, createTab } from '../store'
+import { TerminalTheme } from '../types'
+
+interface Props {
+  sessionId: string
+  isActive: boolean
+}
+
+function buildXtermTheme(theme: TerminalTheme) {
+  return {
+    background: theme.colors.background,
+    foreground: theme.colors.foreground,
+    cursor: theme.colors.cursor,
+    cursorAccent: theme.colors.cursorAccent,
+    selectionBackground: theme.colors.selectionBackground,
+    black: theme.colors.black,
+    red: theme.colors.red,
+    green: theme.colors.green,
+    yellow: theme.colors.yellow,
+    blue: theme.colors.blue,
+    magenta: theme.colors.magenta,
+    cyan: theme.colors.cyan,
+    white: theme.colors.white,
+    brightBlack: theme.colors.brightBlack,
+    brightRed: theme.colors.brightRed,
+    brightGreen: theme.colors.brightGreen,
+    brightYellow: theme.colors.brightYellow,
+    brightBlue: theme.colors.brightBlue,
+    brightMagenta: theme.colors.brightMagenta,
+    brightCyan: theme.colors.brightCyan,
+    brightWhite: theme.colors.brightWhite,
+  }
+}
+
+export default function TerminalView({ sessionId, isActive }: Props) {
+  const { theme, settings, fontZoomTick } = useStore()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const xtermRef = useRef<XTerm | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
+  const initialized = useRef(false)
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null)
+  const [aiPromptOpen, setAiPromptOpen] = useState(false)
+  const [aiPromptText, setAiPromptText] = useState('')
+  const [aiPromptLoading, setAiPromptLoading] = useState(false)
+  const aiPromptInputRef = useRef<HTMLInputElement>(null)
+  const [zoomVisible, setZoomVisible] = useState(false)
+  const zoomTimerRef = useRef<ReturnType<typeof setTimeout>>()
+
+  // Context menu state
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; selectedText: string; clipboardText: string } | null>(null)
+  // Agent prompt state
+  const [agentPromptOpen, setAgentPromptOpen] = useState(false)
+  const [agentSelectedText, setAgentSelectedText] = useState('')
+  const [agentQuestion, setAgentQuestion] = useState('')
+  const agentPromptInputRef = useRef<HTMLInputElement>(null)
+
+  const currentLineRef = useRef('')
+  const aiTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const recentOutputRef = useRef('')
+  const cmdHistoryRef = useRef<string[]>([])  // last N commands for context
+  const cleanOutputRef = useRef('')           // ANSI-stripped terminal output for AI context
+
+  // Refs to avoid stale closures in the one-time onData handler
+  const settingsRef = useRef(settings)
+  const aiSuggestionRef = useRef<string | null>(null)
+  useEffect(() => { settingsRef.current = settings }, [settings])
+  useEffect(() => { aiSuggestionRef.current = aiSuggestion }, [aiSuggestion])
+
+  // Batched write buffer — accumulates PTY data and flushes on rAF
+  // so we write to the terminal once per frame instead of per IPC message
+  const writeBufferRef = useRef<string[]>([])
+  const rafRef = useRef<number>(0)
+
+  const flushBuffer = () => {
+    if (writeBufferRef.current.length === 0) return
+    const term = xtermRef.current
+    if (!term) { writeBufferRef.current = []; return }
+    const chunk = writeBufferRef.current.join('')
+    writeBufferRef.current = []
+    term.write(chunk)
+  }
+
+  const scheduleFlush = () => {
+    if (rafRef.current) return
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0
+      flushBuffer()
+    })
+  }
+
+  // Strip all ANSI/VT escape sequences to get plain readable text
+  const stripAnsi = (s: string) =>
+    s.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')  // CSI sequences (colors, cursor, ?25h etc)
+     .replace(/\x1b\[[0-9;?]*[~@]/g, '')      // CSI with ~ or @ terminators
+     .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '') // OSC sequences (title etc)
+     .replace(/\x1b[()][0-9A-Z]/g, '')        // charset designations
+     .replace(/\x1b[^[\]()][A-Z0-9]?/g, '')   // other 2-byte ESC sequences
+     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '') // control chars except \t \n \r
+     .replace(/\r\n?/g, '\n')                 // normalize line endings
+     .replace(/\n{3,}/g, '\n\n')              // collapse excessive blank lines
+
+  const buildContext = () => {
+    const history = cmdHistoryRef.current
+    const historyStr = history.length ? `Recent commands:\n${history.join('\n')}` : ''
+    // Use the last ~800 chars of clean output so filenames/paths from ls etc are visible
+    const output = cleanOutputRef.current.slice(-800)
+    return [historyStr, output].filter(Boolean).join('\n\n')
+  }
+
+  const shouldRequestSuggestion = (partial: string): boolean => {
+    const p = partial.trim()
+    if (p.length < 3) return false
+    // If it ends with a space, only suggest if there's something after the space
+    // e.g. "git " alone is pointless, but "git ch" is good
+    const parts = p.split(' ')
+    const last = parts[parts.length - 1]
+    if (last.length === 0) return false
+    // Don't bother if the last word is already a complete common word with no subcommand potential
+    // (avoids hammering the model for "ollama", "node", "python" alone)
+    if (parts.length === 1 && last.length < 4) return false
+    return true
+  }
+
+  const requestAiSuggestion = async (partial: string) => {
+    const s = settingsRef.current
+    if (!s.aiEnabled || !shouldRequestSuggestion(partial)) {
+      setAiSuggestion(null)
+      return
+    }
+    const suggestion = await window.api.aiComplete(partial, buildContext(), s.aiModel)
+    const trimmed = suggestion?.trim() ?? ''
+    const useful =
+      trimmed.length > 0 &&
+      trimmed.toLowerCase() !== partial.trim().toLowerCase() &&
+      trimmed.toLowerCase().startsWith(partial.trim().toLowerCase())
+    if (useful) {
+      setAiSuggestion(trimmed)
+    } else {
+      setAiSuggestion(null)
+    }
+  }
+
+  const openAgentPrompt = useCallback((selectedText: string) => {
+    setCtxMenu(null)
+    setAgentSelectedText(selectedText)
+    setAgentQuestion('')
+    setAgentPromptOpen(true)
+    setTimeout(() => agentPromptInputRef.current?.focus(), 50)
+  }, [])
+
+  const submitAgentPrompt = useCallback(() => {
+    const question = agentQuestion.trim()
+    if (!question) return
+    const agentCmd = settingsRef.current.agentCommand || 'claude'
+    const context = agentSelectedText.trim()
+    // Build the prompt: wrap context in quotes and append question
+    const escaped = context.replace(/"/g, '\\"').replace(/\n/g, '\\n')
+    const fullCmd = `${agentCmd} "${escaped}\n\n${question}"`
+    const session = createTab()
+    setAgentPromptOpen(false)
+    setAgentQuestion('')
+    setAgentSelectedText('')
+    // Write the command after PTY is ready (small delay to allow PTY init)
+    setTimeout(() => {
+      window.api.writePty(session.id, fullCmd + '\r')
+    }, 600)
+  }, [agentQuestion, agentSelectedText])
+
+  const submitAiPrompt = useCallback(async () => {
+    const text = aiPromptText.trim()
+    if (!text) return
+    setAiPromptLoading(true)
+    try {
+      const result = await window.api.aiComplete(
+        text,
+        buildContext(),
+        settingsRef.current.aiModel,
+        true  // nlMode: natural language → command
+      )
+      const cmd = result?.trim() ?? ''
+      if (cmd) {
+        setAiPromptOpen(false)
+        setAiPromptText('')
+        // Write command to the PTY input line (no \r — user must press Enter)
+        window.api.writePty(sessionId, cmd)
+        currentLineRef.current = cmd
+      }
+    } finally {
+      setAiPromptLoading(false)
+    }
+  }, [aiPromptText, sessionId])
+
+  // ── Mouse drag-to-scroll ─────────────────────────────────────────────────
+  // xterm.js scrolls with the wheel but not with click-drag. We intercept
+  // pointer events on the viewport element and manually scroll it.
+  const dragRef = useRef<{ startY: number; startScroll: number } | null>(null)
+
+  const setupDragScroll = (container: HTMLElement) => {
+    const getViewport = (): HTMLElement | null =>
+      container.querySelector('.xterm-viewport')
+
+    const onPointerDown = (e: PointerEvent) => {
+      // Only middle-button or shift+left drag; plain left is selection
+      if (e.button !== 1 && !(e.button === 0 && e.shiftKey)) return
+      const viewport = getViewport()
+      if (!viewport) return
+      e.preventDefault()
+      dragRef.current = { startY: e.clientY, startScroll: viewport.scrollTop }
+      container.setPointerCapture(e.pointerId)
+      container.style.cursor = 'grabbing'
+    }
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragRef.current) return
+      const viewport = getViewport()
+      if (!viewport) return
+      const delta = dragRef.current.startY - e.clientY
+      viewport.scrollTop = dragRef.current.startScroll + delta
+    }
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (!dragRef.current) return
+      dragRef.current = null
+      container.releasePointerCapture(e.pointerId)
+      container.style.cursor = ''
+    }
+
+    container.addEventListener('pointerdown', onPointerDown)
+    container.addEventListener('pointermove', onPointerMove)
+    container.addEventListener('pointerup', onPointerUp)
+    container.addEventListener('pointercancel', onPointerUp)
+
+    return () => {
+      container.removeEventListener('pointerdown', onPointerDown)
+      container.removeEventListener('pointermove', onPointerMove)
+      container.removeEventListener('pointerup', onPointerUp)
+      container.removeEventListener('pointercancel', onPointerUp)
+    }
+  }
+
+  // ── Main terminal init ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!containerRef.current || initialized.current) return
+    initialized.current = true
+
+    const term = new XTerm({
+      theme: buildXtermTheme(theme),
+      fontSize: settings.fontSize,
+      fontFamily: settings.fontFamily,
+      cursorStyle: settings.cursorStyle,
+      cursorBlink: settings.cursorBlink,
+      scrollback: settings.scrollback,
+      allowProposedApi: true,
+      // Smooth scroll with a short duration — feels snappier than 100ms
+      smoothScrollDuration: 80,
+      overviewRulerWidth: 0,
+      scrollOnUserInput: true,
+      // These improve rendering sharpness
+      drawBoldTextInBrightColors: true,
+      minimumContrastRatio: 1,
+    })
+
+    const fitAddon = new FitAddon()
+    const webLinksAddon = new WebLinksAddon()
+    const searchAddon = new SearchAddon()
+
+    term.loadAddon(fitAddon)
+    term.loadAddon(webLinksAddon)
+    term.loadAddon(searchAddon)
+
+    term.open(containerRef.current)
+
+    // ── Canvas renderer ──
+    // Faster than the default DOM renderer, no WebGL black-screen risk.
+    // xterm v5's recommended accelerated renderer.
+    const canvasAddon = new CanvasAddon()
+    term.loadAddon(canvasAddon)
+
+    xtermRef.current = term
+    fitAddonRef.current = fitAddon
+
+    // One-shot ResizeObserver: wait for real layout before spawning PTY
+    let ptyStarted = false
+    const startObserver = new ResizeObserver(() => {
+      if (ptyStarted) return
+      const { width, height } = containerRef.current!.getBoundingClientRect()
+      if (width === 0 || height === 0) return
+      ptyStarted = true
+      startObserver.disconnect()
+      fitAddon.fit()
+      window.api.createPty(sessionId, term.cols, term.rows)
+    })
+    startObserver.observe(containerRef.current)
+
+    // Buffered PTY data → rAF flush for smooth rendering
+    const removeDataListener = window.api.onPtyData(sessionId, (data) => {
+      writeBufferRef.current.push(data)
+      recentOutputRef.current += data
+      if (recentOutputRef.current.length > 2000) {
+        recentOutputRef.current = recentOutputRef.current.slice(-1000)
+      }
+      // Accumulate ANSI-stripped output separately for AI context
+      const clean = stripAnsi(data)
+      if (clean.trim()) {
+        cleanOutputRef.current += clean
+        if (cleanOutputRef.current.length > 4000) {
+          cleanOutputRef.current = cleanOutputRef.current.slice(-2000)
+        }
+      }
+      scheduleFlush()
+    })
+
+    const removeExitListener = window.api.onPtyExit(sessionId, () => {
+      writeBufferRef.current.push('\r\n\x1b[90m[Session ended]\x1b[0m\r\n')
+      scheduleFlush()
+    })
+
+    term.onData((data) => {
+      // Shift+Tab = ESC [ Z  — open AI natural-language prompt
+      if (data === '\x1b[Z') {
+        setAiPromptOpen(true)
+        setTimeout(() => aiPromptInputRef.current?.focus(), 50)
+        return
+      }
+
+      // Tab with an active AI suggestion: accept the suggestion instead of
+      // forwarding Tab to the shell (which would trigger native completion
+      // and garble the input with both completions overlapping).
+      if (data === '\t' && aiSuggestionRef.current) {
+        const remaining = aiSuggestionRef.current.slice(currentLineRef.current.length)
+        if (remaining) {
+          window.api.writePty(sessionId, remaining)
+          currentLineRef.current = aiSuggestionRef.current
+          setAiSuggestion(null)
+        }
+        return
+      }
+
+      window.api.writePty(sessionId, data)
+
+      if (data === '\r' || data === '\n') {
+        const cmd = currentLineRef.current.trim()
+        if (cmd) {
+          window.api.addHistory(cmd)
+          cmdHistoryRef.current = [...cmdHistoryRef.current, cmd].slice(-10)
+        }
+        currentLineRef.current = ''
+        setAiSuggestion(null)
+      } else if (data === '\x7f' || data === '\b') {
+        currentLineRef.current = currentLineRef.current.slice(0, -1)
+        clearTimeout(aiTimeoutRef.current)
+        aiTimeoutRef.current = setTimeout(
+          () => requestAiSuggestion(currentLineRef.current),
+          400
+        )
+      } else if (data.length === 1 && data >= ' ') {
+        currentLineRef.current += data
+        clearTimeout(aiTimeoutRef.current)
+        aiTimeoutRef.current = setTimeout(
+          () => requestAiSuggestion(currentLineRef.current),
+          400
+        )
+      }
+    })
+
+    term.onResize(({ cols, rows }) => {
+      window.api.resizePty(sessionId, cols, rows)
+    })
+
+    // Debounced resize — don't refit on every pixel change
+    let resizeTimeout: ReturnType<typeof setTimeout>
+    const resizeObserver = new ResizeObserver(() => {
+      if (!ptyStarted) return
+      clearTimeout(resizeTimeout)
+      resizeTimeout = setTimeout(() => {
+        try { fitAddon.fit() } catch { /* teardown */ }
+      }, 16)
+    })
+    resizeObserver.observe(containerRef.current)
+
+    const removeDragScroll = setupDragScroll(containerRef.current)
+
+    // Right-click context menu: always show, clipboard read is async
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault()
+      const selected = term.getSelection()
+      navigator.clipboard.readText().catch(() => '').then(clipboardText => {
+        // Only show if there's something useful: selected text OR clipboard content
+        if (!selected && !clipboardText) return
+        setCtxMenu({ x: e.clientX, y: e.clientY, selectedText: selected, clipboardText })
+      })
+    }
+    containerRef.current.addEventListener('contextmenu', onContextMenu)
+
+    // Ctrl+Scroll to zoom terminal font size
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      zoomFontSize(e.deltaY < 0 ? 1 : -1)
+    }
+    containerRef.current.addEventListener('wheel', onWheel, { passive: false })
+
+    // Ctrl+Plus / Ctrl+Minus / Ctrl+0 keyboard zoom
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.altKey) return
+      if (e.key === '=' || e.key === '+') {
+        e.preventDefault()
+        zoomFontSize(1)
+      } else if (e.key === '-') {
+        e.preventDefault()
+        zoomFontSize(-1)
+      } else if (e.key === '0') {
+        e.preventDefault()
+        resetFontSize()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => {
+      cancelAnimationFrame(rafRef.current)
+      clearTimeout(resizeTimeout)
+      clearTimeout(aiTimeoutRef.current)
+      startObserver.disconnect()
+      resizeObserver.disconnect()
+      removeDragScroll()
+      removeDataListener()
+      removeExitListener()
+      containerRef.current?.removeEventListener('contextmenu', onContextMenu)
+      containerRef.current?.removeEventListener('wheel', onWheel)
+      window.removeEventListener('keydown', onKeyDown)
+      canvasAddon.dispose()
+      term.dispose()
+      initialized.current = false
+    }
+  }, [sessionId])
+
+  // ── Reactive option updates ──────────────────────────────────────────────
+  useEffect(() => {
+    if (xtermRef.current) {
+      xtermRef.current.options.theme = buildXtermTheme(theme)
+    }
+  }, [theme])
+
+  useEffect(() => {
+    if (xtermRef.current) {
+      xtermRef.current.options.fontSize = settings.fontSize
+      xtermRef.current.options.fontFamily = settings.fontFamily
+      xtermRef.current.options.cursorStyle = settings.cursorStyle
+      xtermRef.current.options.cursorBlink = settings.cursorBlink
+      setTimeout(() => fitAddonRef.current?.fit(), 10)
+    }
+  }, [settings.fontSize, settings.fontFamily, settings.cursorStyle, settings.cursorBlink])
+
+  // Flash zoom indicator only when user actively zooms (Ctrl+Scroll / Ctrl+±)
+  useEffect(() => {
+    if (fontZoomTick === 0) return
+    setZoomVisible(true)
+    clearTimeout(zoomTimerRef.current)
+    zoomTimerRef.current = setTimeout(() => setZoomVisible(false), 1200)
+    return () => clearTimeout(zoomTimerRef.current)
+  }, [fontZoomTick])
+
+  useEffect(() => {
+    if (isActive && xtermRef.current) {
+      xtermRef.current.focus()
+      setTimeout(() => fitAddonRef.current?.fit(), 10)
+    }
+  }, [isActive])
+
+  return (
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        position: 'relative',
+        background: theme.colors.background,
+      }}
+    >
+      <div
+        ref={containerRef}
+        className="terminal-container"
+        style={{ width: '100%', height: '100%', padding: '4px 0 0 8px' }}
+      />
+      {/* Inline autocomplete ghost pill */}
+      {aiSuggestion && !aiPromptOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 8,
+            right: 12,
+            background: theme.ui.bgTertiary,
+            border: `1px solid ${theme.ui.border}`,
+            borderRadius: 6,
+            padding: '4px 10px',
+            fontSize: 12,
+            color: theme.ui.textMuted,
+            fontFamily: settings.fontFamily,
+            maxWidth: '60%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            opacity: 0.85,
+            pointerEvents: 'none',
+          }}
+        >
+          <span style={{ color: theme.ui.accent }}>AI</span>{' '}
+          <span style={{ color: theme.ui.textDim }}>{currentLineRef.current}</span>
+          <span style={{ color: theme.ui.textMuted }}>
+            {aiSuggestion.slice(currentLineRef.current.length)}
+          </span>
+          <span style={{ marginLeft: 8, color: theme.ui.textDim, fontSize: 10 }}>
+            Tab ↵
+          </span>
+        </div>
+      )}
+
+      {/* Zoom level indicator — appears briefly on Ctrl+Scroll / Ctrl+±  */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 12,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: theme.ui.bgTertiary,
+          border: `1px solid ${theme.ui.border}`,
+          borderRadius: 8,
+          padding: '5px 14px',
+          fontSize: 12,
+          fontWeight: 600,
+          color: theme.ui.text,
+          pointerEvents: 'none',
+          zIndex: 30,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          opacity: zoomVisible ? 0.92 : 0,
+          transition: zoomVisible ? 'opacity 0.1s' : 'opacity 0.4s',
+          boxShadow: `0 2px 12px ${theme.ui.shadow ?? 'rgba(0,0,0,0.3)'}`,
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          <line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" />
+        </svg>
+        <span>{Math.round((settings.fontSize / 14) * 100)}%</span>
+        <span style={{ color: theme.ui.textDim, fontWeight: 400, fontSize: 11 }}>
+          ({settings.fontSize}px)
+        </span>
+      </div>
+
+      {/* Right-click context menu */}
+      {ctxMenu && (
+        <ContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          selectedText={ctxMenu.selectedText}
+          clipboardText={ctxMenu.clipboardText}
+          onClose={() => setCtxMenu(null)}
+          onCopy={() => {
+            navigator.clipboard.writeText(ctxMenu.selectedText).catch(() => {})
+            setCtxMenu(null)
+          }}
+          onPaste={() => {
+            window.api.writePty(sessionId, ctxMenu.clipboardText)
+            setCtxMenu(null)
+          }}
+          onSendToAgent={() => openAgentPrompt(ctxMenu.selectedText)}
+          ui={theme.ui}
+        />
+      )}
+
+      {/* Send to Agent prompt overlay */}
+      {agentPromptOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'center',
+            paddingBottom: 24,
+            background: 'rgba(0,0,0,0.45)',
+            zIndex: 25,
+          }}
+          onClick={e => {
+            if (e.target === e.currentTarget) {
+              setAgentPromptOpen(false)
+              setAgentQuestion('')
+              xtermRef.current?.focus()
+            }
+          }}
+        >
+          <div style={{
+            width: '90%',
+            maxWidth: 580,
+            background: theme.ui.bgSecondary,
+            border: `1px solid ${theme.ui.accent}55`,
+            borderRadius: 10,
+            boxShadow: `0 8px 32px ${theme.ui.shadow ?? 'rgba(0,0,0,0.4)'}`,
+            overflow: 'hidden',
+          }}>
+            {/* Header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 12px',
+              borderBottom: `1px solid ${theme.ui.border}`,
+              fontSize: 11, color: theme.ui.textDim,
+            }}>
+              <span style={{ color: theme.ui.accent, fontWeight: 600 }}>Agent</span>
+              <span>What do you want to ask about the selected text? Press Enter to open a new shell.</span>
+            </div>
+
+            {/* Selected text preview */}
+            {agentSelectedText && (
+              <div style={{
+                padding: '6px 12px',
+                background: theme.ui.bgTertiary,
+                borderBottom: `1px solid ${theme.ui.border}`,
+                fontSize: 11,
+                color: theme.ui.textMuted,
+                fontFamily: settings.fontFamily,
+                maxHeight: 72,
+                overflow: 'hidden',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+                display: '-webkit-box',
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical',
+              }}>
+                {agentSelectedText}
+              </div>
+            )}
+
+            {/* Input row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px' }}>
+              <input
+                ref={agentPromptInputRef}
+                value={agentQuestion}
+                onChange={e => setAgentQuestion(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { e.preventDefault(); submitAgentPrompt() }
+                  if (e.key === 'Escape') {
+                    setAgentPromptOpen(false)
+                    setAgentQuestion('')
+                    xtermRef.current?.focus()
+                  }
+                }}
+                placeholder={`Ask ${settings.agentCommand || 'claude'} about this…`}
+                style={{
+                  flex: 1,
+                  background: theme.ui.bgTertiary,
+                  border: `1px solid ${theme.ui.border}`,
+                  borderRadius: 6,
+                  padding: '7px 10px',
+                  fontSize: 13,
+                  color: theme.ui.text,
+                  outline: 'none',
+                  fontFamily: settings.fontFamily,
+                }}
+              />
+              <button
+                onClick={submitAgentPrompt}
+                disabled={!agentQuestion.trim()}
+                style={{
+                  padding: '7px 14px',
+                  background: theme.ui.accent,
+                  border: 'none',
+                  borderRadius: 6,
+                  color: '#fff',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: agentQuestion.trim() ? 'pointer' : 'not-allowed',
+                  opacity: agentQuestion.trim() ? 1 : 0.5,
+                  transition: 'opacity 0.15s',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Open Agent ↵
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI natural-language prompt overlay (Shift+Tab) */}
+      {aiPromptOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'center',
+            paddingBottom: 24,
+            background: 'rgba(0,0,0,0.35)',
+            zIndex: 20,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) { setAiPromptOpen(false); setAiPromptText(''); xtermRef.current?.focus() } }}
+        >
+          <div style={{
+            width: '90%',
+            maxWidth: 560,
+            background: theme.ui.bgSecondary,
+            border: `1px solid ${theme.ui.accent}55`,
+            borderRadius: 10,
+            boxShadow: `0 8px 32px ${theme.ui.shadow ?? 'rgba(0,0,0,0.4)'}`,
+            overflow: 'hidden',
+          }}>
+            {/* Header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 12px',
+              borderBottom: `1px solid ${theme.ui.border}`,
+              fontSize: 11, color: theme.ui.textDim,
+            }}>
+              <span style={{ color: theme.ui.accent, fontWeight: 600 }}>AI</span>
+              <span>Ask for a command — press Enter to confirm, Esc to cancel</span>
+            </div>
+
+            {/* Input row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px' }}>
+              <input
+                ref={aiPromptInputRef}
+                value={aiPromptText}
+                onChange={e => setAiPromptText(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !aiPromptLoading) { e.preventDefault(); submitAiPrompt() }
+                  if (e.key === 'Escape') { setAiPromptOpen(false); setAiPromptText(''); xtermRef.current?.focus() }
+                }}
+                placeholder="e.g. list all files modified today, kill process on port 3000…"
+                disabled={aiPromptLoading}
+                style={{
+                  flex: 1,
+                  background: theme.ui.bgTertiary,
+                  border: `1px solid ${theme.ui.border}`,
+                  borderRadius: 6,
+                  padding: '7px 10px',
+                  fontSize: 13,
+                  color: theme.ui.text,
+                  outline: 'none',
+                  fontFamily: settings.fontFamily,
+                  opacity: aiPromptLoading ? 0.6 : 1,
+                }}
+              />
+              <button
+                onClick={submitAiPrompt}
+                disabled={aiPromptLoading || !aiPromptText.trim()}
+                style={{
+                  padding: '7px 14px',
+                  background: theme.ui.accent,
+                  border: 'none',
+                  borderRadius: 6,
+                  color: '#fff',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: aiPromptLoading || !aiPromptText.trim() ? 'not-allowed' : 'pointer',
+                  opacity: aiPromptLoading || !aiPromptText.trim() ? 0.5 : 1,
+                  transition: 'opacity 0.15s',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {aiPromptLoading ? '…' : 'Generate ↵'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Context menu ──────────────────────────────────────────────────────────────
+function ContextMenu({ x, y, selectedText, clipboardText, onClose, onCopy, onPaste, onSendToAgent, ui }: {
+  x: number
+  y: number
+  selectedText: string
+  clipboardText: string
+  onClose: () => void
+  onCopy: () => void
+  onPaste: () => void
+  onSendToAgent: () => void
+  ui: any
+}) {
+  // Close on any outside click
+  useEffect(() => {
+    const handler = () => onClose()
+    window.addEventListener('mousedown', handler)
+    return () => window.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  const hasCopy = !!selectedText
+  const hasPaste = !!clipboardText
+  const hasAgent = !!selectedText
+
+  // Estimate height: 32px per item + 4px padding top/bottom + 9px per divider
+  const itemCount = (hasCopy ? 1 : 0) + (hasPaste ? 1 : 0) + (hasAgent ? 1 : 0)
+  const dividers = (hasCopy || hasPaste) && hasAgent ? 1 : 0
+  const menuHeight = itemCount * 32 + 8 + dividers * 9
+  const menuWidth = 180
+  const cx = Math.min(x, window.innerWidth - menuWidth - 8)
+  const cy = Math.min(y, window.innerHeight - menuHeight - 8)
+
+  return (
+    <div
+      onMouseDown={e => e.stopPropagation()}
+      style={{
+        position: 'fixed',
+        left: cx,
+        top: cy,
+        width: menuWidth,
+        background: ui.bgSecondary,
+        border: `1px solid ${ui.border}`,
+        borderRadius: 8,
+        boxShadow: `0 4px 20px ${ui.shadow ?? 'rgba(0,0,0,0.4)'}`,
+        zIndex: 9999,
+        overflow: 'hidden',
+        padding: '4px 0',
+      }}
+    >
+      {hasCopy && <CtxItem label="Copy" icon="copy" onClick={onCopy} ui={ui} />}
+      {hasPaste && <CtxItem label="Paste" icon="paste" onClick={onPaste} ui={ui} />}
+      {(hasCopy || hasPaste) && hasAgent && (
+        <div style={{ height: 1, background: ui.border, margin: '4px 0' }} />
+      )}
+      {hasAgent && <CtxItem label="Send to Agent" icon="agent" onClick={onSendToAgent} ui={ui} accent />}
+    </div>
+  )
+}
+
+function CtxItem({ label, icon, onClick, ui, accent }: {
+  label: string
+  icon: 'copy' | 'paste' | 'agent'
+  onClick: () => void
+  ui: any
+  accent?: boolean
+}) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        width: '100%',
+        padding: '7px 12px',
+        background: hovered ? (accent ? `${ui.accent}22` : ui.bgTertiary) : 'transparent',
+        border: 'none',
+        cursor: 'pointer',
+        color: accent ? (hovered ? ui.accent : ui.textMuted) : (hovered ? ui.text : ui.textMuted),
+        fontSize: 12,
+        textAlign: 'left',
+        transition: 'background 0.1s, color 0.1s',
+      }}
+    >
+      {icon === 'copy' ? (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+      ) : icon === 'paste' ? (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+          <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+        </svg>
+      ) : (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2a10 10 0 1 0 10 10" />
+          <path d="M12 8v4l3 3" />
+          <path d="M18 2v6h6" />
+        </svg>
+      )}
+      {label}
+    </button>
+  )
+}
