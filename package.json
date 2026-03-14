@@ -6,21 +6,14 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && electron-builder",
+    "build": "tsc && vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
+    "dist": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win nsis --config.win.signAndEditExecutable=false",
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
-    "@xterm/addon-canvas": "^0.7.0",
-    "@xterm/addon-fit": "^0.10.0",
-    "@xterm/addon-search": "^0.15.0",
-    "@xterm/addon-unicode11": "^0.8.0",
-    "@xterm/addon-web-links": "^0.11.0",
-    "@xterm/addon-webgl": "^0.19.0",
-    "@xterm/xterm": "^5.5.0",
     "node-pty": "^1.0.0",
-    "simple-icons": "^16.11.0",
     "ssh2": "^1.17.0"
   },
   "devDependencies": {
@@ -28,13 +21,23 @@
     "@types/react-dom": "^19.0.0",
     "@types/ssh2": "^1.15.5",
     "@vitejs/plugin-react": "^4.3.0",
+    "@xterm/addon-canvas": "^0.7.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-search": "^0.15.0",
+    "@xterm/addon-unicode11": "^0.8.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/addon-webgl": "^0.19.0",
+    "@xterm/xterm": "^5.5.0",
     "concurrently": "^9.1.0",
+    "cross-env": "^10.1.0",
     "electron": "^34.0.0",
     "electron-builder": "^25.1.0",
     "lucide-react": "^0.468.0",
     "playwright": "^1.58.2",
+    "png-to-ico": "^3.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "simple-icons": "^16.11.0",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
     "vite-plugin-electron": "^0.28.0",
@@ -44,14 +47,49 @@
   "build": {
     "appId": "com.nexshell.app",
     "productName": "NexShell",
-    "icon": "icon.png",
+    "copyright": "Copyright © 2026 NexShell",
+    "icon": "icon.ico",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/node-pty/**",
+      "node_modules/ssh2/**",
+      "node_modules/cpu-features/**",
+      "node_modules/nan/**"
+    ],
     "files": [
-      "dist/**/*",
-      "dist-electron/**/*"
+      "dist/assets/**/*",
+      "dist/index.html",
+      "dist-electron/**/*",
+      "node_modules/**/*",
+      "!node_modules/**/*.ts",
+      "!node_modules/**/*.map",
+      "!node_modules/**/test{,s}/**",
+      "!node_modules/**/example{,s}/**",
+      "!node_modules/**/.bin/**",
+      "!node_modules/**/docs/**"
     ],
     "win": {
-      "target": "nsis",
-      "icon": "icon.png"
-    }
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NexShell"
+    },
+    "publish": null
   }
 }

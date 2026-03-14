@@ -14,7 +14,7 @@ export function useStoreSelector<T>(selector: (state: ReturnType<typeof getState
 }
 
 export function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number): T {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
     return () => {

@@ -222,7 +222,7 @@ declare global {
       sftpConnect: (opts: SftpConnectOpts) => Promise<{ id: string } | { error: string }>
       sftpDisconnect: (id: string) => Promise<void>
       sftpList: (id: string, remotePath: string) => Promise<SftpEntry[] | { error: string }>
-      sftpDownload: (id: string, remotePath: string, localPath: string) => Promise<{ ok: true } | { error: string }>
+      sftpDownload: (id: string, remotePath: string, localDir: string, fileName: string) => Promise<{ ok: true } | { error: string }>
       sftpUpload: (id: string, localPath: string, remotePath: string) => Promise<{ ok: true } | { error: string }>
       sftpMkdir: (id: string, remotePath: string) => Promise<{ ok: true } | { error: string }>
       sftpDelete: (id: string, remotePath: string) => Promise<{ ok: true } | { error: string }>

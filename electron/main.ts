@@ -748,9 +748,11 @@ ipcMain.handle('sftp:list', async (_event, id: string, remotePath: string) => {
   })
 })
 
-ipcMain.handle('sftp:download', async (_event, id: string, remotePath: string, localPath: string) => {
+ipcMain.handle('sftp:download', async (_event, id: string, remotePath: string, localDir: string, fileName: string) => {
   const session = sftpSessions.get(id)
   if (!session) return { error: 'Not connected' }
+  const resolvedDir = localDir.replace(/^~/, os.homedir())
+  const localPath = path.join(resolvedDir, fileName)
   return new Promise((resolve) => {
     session.sftp.fastGet(remotePath, localPath, (err) => {
       if (err) resolve({ error: sftpErrMsg(err, 'Download failed') })

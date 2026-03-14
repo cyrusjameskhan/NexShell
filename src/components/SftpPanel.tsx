@@ -164,13 +164,10 @@ function SftpPanelInner({ ui }: { ui: any }) {
     if (!sftpId) return
     const toTransfer = files.filter(e => !e.isDirectory)
     if (toTransfer.length === 0) return
-    const isWindows = localPath.includes('\\')
-    const sep = isWindows ? '\\' : '/'
     for (let i = 0; i < toTransfer.length; i++) {
       const f = toTransfer[i]
       showStatus(`Downloading ${f.name} (${i + 1}/${toTransfer.length})…`, 60000)
-      const dest = localPath.replace(/[/\\]$/, '') + sep + f.name
-      const result = await window.api.sftpDownload(sftpId, f.path, dest)
+      const result = await window.api.sftpDownload(sftpId, f.path, localPath, f.name)
       if ('error' in result) { showStatus(`Error: ${result.error}`, 5000); return }
     }
     showStatus(`Downloaded ${toTransfer.length} file${toTransfer.length !== 1 ? 's' : ''}`)
@@ -412,7 +409,7 @@ function SftpPanelInner({ ui }: { ui: any }) {
           {/* Local panel */}
           <div
             style={{
-              flex: 1, display: 'flex', flexDirection: 'column', position: 'relative',
+              flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative',
               borderRight: `1px solid ${ui.border}`,
               outline: dropTarget === 'local' ? `2px solid ${ui.accent}` : 'none',
               outlineOffset: -2,
@@ -464,7 +461,7 @@ function SftpPanelInner({ ui }: { ui: any }) {
           {/* Remote panel */}
           <div
             style={{
-              flex: 1, display: 'flex', flexDirection: 'column', position: 'relative',
+              flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative',
               outline: dropTarget === 'remote' ? `2px solid ${ui.accent}` : 'none',
               outlineOffset: -2,
               transition: 'outline-color 0.15s',
@@ -598,6 +595,9 @@ function PanelHeader({ label, path, onPathChange, onPathKey, onUp, onRefresh, ui
 
 // ── File List ──
 
+type SortKey = 'name' | 'size' | 'date'
+type SortDir = 'asc' | 'desc'
+
 function FileList({ side, entries, loading, error, selected, onSelect, onNavigate, onContextMenu, onDragStart, onDragEnd, renamingPath, renamingValue, onRenamingChange, onRenameCommit, onRenameCancel, ui }: {
   side: PanelSide
   entries: SftpEntry[]; loading: boolean; error: string | null
@@ -613,6 +613,23 @@ function FileList({ side, entries, loading, error, selected, onSelect, onNavigat
   ui: any
 }) {
   const renameRef = useRef<HTMLInputElement>(null)
+  const [sortKey, setSortKey] = useState<SortKey>('name')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+
+  const handleSortClick = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
+  const sortedEntries = [...entries].sort((a, b) => {
+    // Directories always first
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
+    let cmp = 0
+    if (sortKey === 'name') cmp = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    else if (sortKey === 'size') cmp = a.size - b.size
+    else if (sortKey === 'date') cmp = a.modTime - b.modTime
+    return sortDir === 'asc' ? cmp : -cmp
+  })
 
   useEffect(() => {
     if (renamingPath) {
@@ -632,8 +649,8 @@ function FileList({ side, entries, loading, error, selected, onSelect, onNavigat
       if (next.has(entry.path)) next.delete(entry.path)
       else next.add(entry.path)
       onSelect(next)
-    } else if (e.shiftKey && entries.length > 0) {
-      const paths = entries.map(e => e.path)
+    } else if (e.shiftKey && sortedEntries.length > 0) {
+      const paths = sortedEntries.map(e => e.path)
       const lastSelected = [...selected].pop()
       const lastIdx = lastSelected ? paths.indexOf(lastSelected) : 0
       const curIdx = paths.indexOf(entry.path)
@@ -691,16 +708,16 @@ function FileList({ side, entries, loading, error, selected, onSelect, onNavigat
         background: ui.bg, fontSize: 10, fontWeight: 600, color: ui.textDim,
         textTransform: 'uppercase', letterSpacing: '0.04em', zIndex: 2,
       }}>
-        <span style={{ flex: 1 }}>Name</span>
-        <span style={{ width: 70, textAlign: 'right' }}>Size</span>
-        <span style={{ width: 90, textAlign: 'right' }}>Modified</span>
+        <SortHeader label="Name" sortKey="name" active={sortKey} dir={sortDir} onClick={handleSortClick} style={{ flex: 1 }} ui={ui} />
+        <SortHeader label="Size" sortKey="size" active={sortKey} dir={sortDir} onClick={handleSortClick} style={{ width: 70, justifyContent: 'flex-end' }} ui={ui} />
+        <SortHeader label="Modified" sortKey="date" active={sortKey} dir={sortDir} onClick={handleSortClick} style={{ width: 90, justifyContent: 'flex-end' }} ui={ui} />
       </div>
 
       {entries.length === 0 && (
         <div style={{ padding: 20, textAlign: 'center', fontSize: 11, color: ui.textDim }}>Empty folder</div>
       )}
 
-      {entries.map(entry => {
+      {sortedEntries.map(entry => {
         const isSel = selected.has(entry.path)
         const isRenaming = renamingPath === entry.path
         return (
@@ -774,6 +791,39 @@ function FileList({ side, entries, loading, error, selected, onSelect, onNavigat
         )
       })}
     </div>
+  )
+}
+
+// ── Sort Header ──
+
+function SortHeader({ label, sortKey, active, dir, onClick, style, ui }: {
+  label: string; sortKey: SortKey; active: SortKey; dir: SortDir
+  onClick: (k: SortKey) => void; style?: React.CSSProperties; ui: any
+}) {
+  const isActive = active === sortKey
+  return (
+    <button
+      onClick={() => onClick(sortKey)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 3,
+        background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+        fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
+        color: isActive ? ui.accent : ui.textDim,
+        transition: 'color 0.12s',
+        ...style,
+      }}
+      onMouseEnter={e => { if (!isActive) e.currentTarget.style.color = ui.text }}
+      onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = ui.textDim }}
+    >
+      {label}
+      {isActive && (
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          {dir === 'asc'
+            ? <polyline points="18 15 12 9 6 15" />
+            : <polyline points="6 9 12 15 18 9" />}
+        </svg>
+      )}
+    </button>
   )
 }
 

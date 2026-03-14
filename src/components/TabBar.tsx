@@ -158,15 +158,19 @@ export default function TabBar() {
 
       {/* Right-side toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 8, flexShrink: 0 }}>
-        <IconButton onClick={() => createTab()} title="New tab (Ctrl+Shift+T)" ui={ui}>
-          <PlusIcon />
-        </IconButton>
+        {tabs.length > 0 && !sidePanelOpen && (
+          <>
+            <IconButton onClick={() => createTab()} title="New tab (Ctrl+Shift+T)" ui={ui}>
+              <PlusIcon />
+            </IconButton>
 
-        <div style={{ width: 1, height: 16, background: ui.border, margin: '0 4px' }} />
+            <div style={{ width: 1, height: 16, background: ui.border, margin: '0 4px' }} />
 
-        <IconButton onClick={() => setState({ historyOpen: true })} title="Command history (Ctrl+R)" ui={ui}>
-          <HistoryIcon />
-        </IconButton>
+            <IconButton onClick={() => setState({ historyOpen: true })} title="Command history (Ctrl+R)" ui={ui}>
+              <HistoryIcon />
+            </IconButton>
+          </>
+        )}
 
         {hasSshConnection && (
           <>

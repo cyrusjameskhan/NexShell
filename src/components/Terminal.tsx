@@ -52,7 +52,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
   const [aiPromptLoading, setAiPromptLoading] = useState(false)
   const aiPromptInputRef = useRef<HTMLInputElement>(null)
   const [zoomVisible, setZoomVisible] = useState(false)
-  const zoomTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const zoomTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   // Context menu state
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; selectedText: string; clipboardText: string; snippets: Snippet[] } | null>(null)
@@ -63,7 +63,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
   const agentPromptInputRef = useRef<HTMLInputElement>(null)
 
   const currentLineRef = useRef('')
-  const aiTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const aiTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const recentOutputRef = useRef('')
   const cmdHistoryRef = useRef<string[]>([])  // last N commands for context
   const cleanOutputRef = useRef('')           // ANSI-stripped terminal output for AI context
