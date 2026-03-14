@@ -2,6 +2,7 @@
   "name": "nexshell",
   "version": "0.1.0",
   "description": "A sleek PowerShell terminal wrapper with AI autocomplete, themes, and split panes",
+  "license": "GPL-3.0-only",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",

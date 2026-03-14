@@ -558,7 +558,6 @@ function ConnectOverlay({ state, ui, onDismiss, onGoToShell }: {
           {/* Ring */}
           {isLoading && (
             <svg style={{ position: 'absolute', inset: 0, animation: 'spin 1s linear infinite' }} width="52" height="52" viewBox="0 0 52 52">
-              <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
               <circle cx="26" cy="26" r="22" fill="none" stroke={ui.accent} strokeWidth="3" strokeDasharray="100 40" strokeLinecap="round" />
             </svg>
           )}

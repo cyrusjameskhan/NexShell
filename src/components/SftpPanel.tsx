@@ -914,7 +914,6 @@ function SmallBtn({ children, title, onClick, ui }: {
 function Spinner({ ui }: { ui: any }) {
   return (
     <svg style={{ animation: 'spin 1s linear infinite' }} width="20" height="20" viewBox="0 0 24 24">
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       <circle cx="12" cy="12" r="10" fill="none" stroke={ui.accent} strokeWidth="2.5" strokeDasharray="32 20" strokeLinecap="round" />
     </svg>
   )

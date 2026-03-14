@@ -160,17 +160,35 @@ export default function TerminalView({ sessionId, isActive }: Props) {
     const question = agentQuestion.trim()
     if (!question) return
     const agentCmd = settingsRef.current.agentCommand || 'claude'
+    const shell = settingsRef.current.shell || 'powershell.exe'
     const context = agentSelectedText.trim()
-    // Build the prompt: wrap context in quotes and append question
-    const escaped = context.replace(/"/g, '\\"').replace(/\n/g, '\\n')
-    const fullCmd = `${agentCmd} "${escaped}\n\n${question}"`
     const session = createTab()
     setAgentPromptOpen(false)
     setAgentQuestion('')
     setAgentSelectedText('')
-    // Write the command after PTY is ready (small delay to allow PTY init)
+
+    const isPowerShell = /powershell|pwsh/i.test(shell)
+    const isCmd = /^cmd(\.exe)?$/i.test(shell)
+
     setTimeout(() => {
-      window.api.writePty(session.id, fullCmd + '\r')
+      if (isPowerShell) {
+        // PowerShell: use backtick-n for newlines inside double-quoted strings
+        const escapePsStr = (s: string) =>
+          s.replace(/`/g, '``').replace(/"/g, '`"').replace(/\r\n/g, '`n').replace(/\n/g, '`n').replace(/\r/g, '`n')
+        const prompt = context ? `${context}\n\n${question}` : question
+        const escaped = escapePsStr(prompt)
+        window.api.writePty(session.id, `${agentCmd} -p "${escaped}"\r`)
+      } else if (isCmd) {
+        // cmd.exe: no good way to embed newlines, fall back to interactive
+        window.api.writePty(session.id, agentCmd + '\r')
+      } else {
+        // bash/zsh/fish: use $'...' ANSI-C quoting for real newlines
+        const escapeSh = (s: string) =>
+          s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r\n/g, '\\n').replace(/\n/g, '\\n').replace(/\r/g, '\\n')
+        const prompt = context ? `${context}\n\n${question}` : question
+        const escaped = escapeSh(prompt)
+        window.api.writePty(session.id, `${agentCmd} -p $'${escaped}'\r`)
+      }
     }, 600)
   }, [agentQuestion, agentSelectedText])
 

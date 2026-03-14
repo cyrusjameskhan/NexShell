@@ -245,27 +245,75 @@ const AGENT_ICONS: Record<string, React.ReactNode> = {
     </svg>
   ),
   openclaw: (
+    // Lobster mascot "Molty" — OpenClaw's official brand animal
     <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="48" height="48" rx="10" fill="#0f1923"/>
-      <path d="M12 28 C12 20 18 14 24 14 C30 14 36 20 36 28" stroke="#00d4aa" strokeWidth="3" strokeLinecap="round" fill="none"/>
-      <path d="M16 34 L12 28" stroke="#00d4aa" strokeWidth="2.5" strokeLinecap="round"/>
-      <path d="M20 36 L16 28" stroke="#00d4aa" strokeWidth="2.5" strokeLinecap="round"/>
-      <path d="M24 37 L24 28" stroke="#00d4aa" strokeWidth="2.5" strokeLinecap="round"/>
-      <path d="M28 36 L32 28" stroke="#00d4aa" strokeWidth="2.5" strokeLinecap="round"/>
-      <path d="M32 34 L36 28" stroke="#00d4aa" strokeWidth="2.5" strokeLinecap="round"/>
+      <rect width="48" height="48" rx="10" fill="#1a0a0a"/>
+      {/* Body */}
+      <ellipse cx="24" cy="28" rx="8" ry="10" fill="#c0392b"/>
+      {/* Head */}
+      <ellipse cx="24" cy="18" rx="6" ry="5" fill="#c0392b"/>
+      {/* Eyes */}
+      <circle cx="21" cy="16" r="1.5" fill="white"/>
+      <circle cx="27" cy="16" r="1.5" fill="white"/>
+      <circle cx="21.5" cy="16" r="0.8" fill="#1a0a0a"/>
+      <circle cx="27.5" cy="16" r="0.8" fill="#1a0a0a"/>
+      {/* Big left claw */}
+      <path d="M16 22 C11 20 9 25 12 27 C10 28 9 32 13 31 L16 28" fill="#e74c3c" stroke="#c0392b" strokeWidth="0.5"/>
+      {/* Big right claw */}
+      <path d="M32 22 C37 20 39 25 36 27 C38 28 39 32 35 31 L32 28" fill="#e74c3c" stroke="#c0392b" strokeWidth="0.5"/>
+      {/* Left arm */}
+      <path d="M18 24 L16 22" stroke="#e74c3c" strokeWidth="2.5" strokeLinecap="round"/>
+      {/* Right arm */}
+      <path d="M30 24 L32 22" stroke="#e74c3c" strokeWidth="2.5" strokeLinecap="round"/>
+      {/* Tail fan */}
+      <path d="M20 37 L19 42" stroke="#e74c3c" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M24 38 L24 43" stroke="#e74c3c" strokeWidth="2.5" strokeLinecap="round"/>
+      <path d="M28 37 L29 42" stroke="#e74c3c" strokeWidth="2" strokeLinecap="round"/>
+      {/* Body segments */}
+      <path d="M17 26 Q24 24 31 26" stroke="#a93226" strokeWidth="1" fill="none"/>
+      <path d="M17 30 Q24 28 31 30" stroke="#a93226" strokeWidth="1" fill="none"/>
+      <path d="M18 34 Q24 32 30 34" stroke="#a93226" strokeWidth="1" fill="none"/>
+      {/* Antennae */}
+      <path d="M21 13 L15 7" stroke="#e74c3c" strokeWidth="1.2" strokeLinecap="round"/>
+      <path d="M27 13 L33 7" stroke="#e74c3c" strokeWidth="1.2" strokeLinecap="round"/>
     </svg>
   ),
   picoclaw: (
+    // Mantis shrimp — PicoClaw's official mascot (small but devastating punch)
     <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="48" height="48" rx="10" fill="#1a1a2e"/>
-      <circle cx="24" cy="22" r="8" stroke="#7B61FF" strokeWidth="2.5" fill="none"/>
-      <circle cx="24" cy="22" r="3" fill="#7B61FF"/>
-      <path d="M24 30 L24 38" stroke="#7B61FF" strokeWidth="2.5" strokeLinecap="round"/>
-      <path d="M18 36 L24 38 L30 36" stroke="#7B61FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M10 22 L16 22" stroke="#7B61FF" strokeWidth="2" strokeLinecap="round" opacity="0.6"/>
-      <path d="M32 22 L38 22" stroke="#7B61FF" strokeWidth="2" strokeLinecap="round" opacity="0.6"/>
-      <path d="M12 12 L17 17" stroke="#7B61FF" strokeWidth="2" strokeLinecap="round" opacity="0.4"/>
-      <path d="M36 12 L31 17" stroke="#7B61FF" strokeWidth="2" strokeLinecap="round" opacity="0.4"/>
+      <rect width="48" height="48" rx="10" fill="#0d1117"/>
+      {/* Body — elongated like a mantis shrimp */}
+      <ellipse cx="24" cy="26" rx="10" ry="6" fill="#2ecc71" opacity="0.9"/>
+      {/* Head */}
+      <ellipse cx="24" cy="19" rx="6" ry="4.5" fill="#27ae60"/>
+      {/* Iridescent body bands */}
+      <path d="M15 24 Q24 22 33 24" stroke="#1abc9c" strokeWidth="1.2" fill="none" opacity="0.7"/>
+      <path d="M15 27 Q24 25 33 27" stroke="#16a085" strokeWidth="1.2" fill="none" opacity="0.7"/>
+      <path d="M15 30 Q24 28 33 30" stroke="#1abc9c" strokeWidth="1" fill="none" opacity="0.5"/>
+      {/* Compound eyes — mantis shrimp have distinctive stalked eyes */}
+      <circle cx="20" cy="17" r="3" fill="#8e44ad"/>
+      <circle cx="28" cy="17" r="3" fill="#8e44ad"/>
+      <circle cx="20" cy="17" r="1.8" fill="#9b59b6"/>
+      <circle cx="28" cy="17" r="1.8" fill="#9b59b6"/>
+      <circle cx="20.5" cy="16.5" r="0.8" fill="white"/>
+      <circle cx="28.5" cy="16.5" r="0.8" fill="white"/>
+      {/* Raptorial claws (the striking appendages) */}
+      <path d="M18 22 C14 19 10 21 11 25 L15 24" fill="#f39c12" stroke="#e67e22" strokeWidth="0.5"/>
+      <path d="M30 22 C34 19 38 21 37 25 L33 24" fill="#f39c12" stroke="#e67e22" strokeWidth="0.5"/>
+      {/* Walking legs */}
+      <path d="M17 28 L13 32" stroke="#27ae60" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M19 30 L15 35" stroke="#27ae60" strokeWidth="1.3" strokeLinecap="round"/>
+      <path d="M21 31 L19 36" stroke="#27ae60" strokeWidth="1.2" strokeLinecap="round"/>
+      <path d="M31 28 L35 32" stroke="#27ae60" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M29 30 L33 35" stroke="#27ae60" strokeWidth="1.3" strokeLinecap="round"/>
+      <path d="M27 31 L29 36" stroke="#27ae60" strokeWidth="1.2" strokeLinecap="round"/>
+      {/* Tail fan */}
+      <path d="M19 32 L17 38" stroke="#2ecc71" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M24 33 L24 39" stroke="#2ecc71" strokeWidth="2.5" strokeLinecap="round"/>
+      <path d="M29 32 L31 38" stroke="#2ecc71" strokeWidth="2" strokeLinecap="round"/>
+      {/* Antennae */}
+      <path d="M21 15 L17 9" stroke="#1abc9c" strokeWidth="1.2" strokeLinecap="round"/>
+      <path d="M27 15 L31 9" stroke="#1abc9c" strokeWidth="1.2" strokeLinecap="round"/>
     </svg>
   ),
 }
@@ -502,7 +550,6 @@ export default function AgentsSection() {
           {checkingCount > 0 ? (
             <span style={{ fontSize: 10, color: ui.textDim }}>
               <svg style={{ display: 'inline', verticalAlign: 'middle', marginRight: 3, animation: 'spin 1s linear infinite' }} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
                 <circle cx="12" cy="12" r="9" strokeDasharray="30 20" strokeLinecap="round" />
               </svg>
               Checking…

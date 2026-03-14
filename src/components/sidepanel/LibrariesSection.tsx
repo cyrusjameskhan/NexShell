@@ -640,7 +640,6 @@ export default function LibrariesSection() {
           {checkingCount > 0 ? (
             <span style={{ fontSize: 10, color: ui.textDim }}>
               <svg style={{ display: 'inline', verticalAlign: 'middle', marginRight: 3, animation: 'spin 1s linear infinite' }} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
                 <circle cx="12" cy="12" r="9" strokeDasharray="30 20" strokeLinecap="round" />
               </svg>
               Checking…
