@@ -4,7 +4,7 @@
   "description": "A sleek cross-platform terminal emulator with AI autocomplete, split panes, SSH/SFTP, and themes",
   "author": {
     "name": "Cyrus Khan",
-    "email": "cyrus@nexshell.app"
+    "email": "cjkagent@gmail.com"
   },
   "license": "GPL-3.0-only",
   "main": "dist-electron/main.js",
