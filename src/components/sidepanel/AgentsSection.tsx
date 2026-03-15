@@ -471,7 +471,7 @@ export default function AgentsSection() {
   }, [])
 
   const recheckAgent = useCallback(async (agent: AgentTool) => {
-    setAgentStates(prev => ({ ...prev, [agent.id]: { ...prev[agent.id], status: 'checking', version: null } }))
+    setAgentStates(prev => ({ ...prev, [agent.id]: { ...prev[agent.id], status: 'checking' as const, version: null, configured: prev[agent.id]?.configured ?? false } }))
     if (agent.isBuiltinLlm) {
       const aiResult = await window.api.aiCheck()
       setAgentStates(prev => ({
@@ -588,7 +588,7 @@ export default function AgentsSection() {
           unlistenRef.current = null
           setAgentStates(prev => ({
             ...prev,
-            [agent.id]: { status: 'installed', version: result.version },
+            [agent.id]: { status: 'installed', version: result.version, configured: prev[agent.id]?.configured ?? true },
           }))
         } else if (attemptsLeft > 0) {
           pollTimer = setTimeout(() => pollUntilInstalled(attemptsLeft - 1), 3000)
@@ -696,7 +696,7 @@ export default function AgentsSection() {
           <button
             onClick={() => {
               const next: Record<string, AgentState> = {}
-              for (const a of AGENTS) next[a.id] = { status: 'checking', version: null }
+              for (const a of AGENTS) next[a.id] = { status: 'checking', version: null, configured: false }
               setAgentStates(next)
               Promise.all(AGENTS.map(async agent => {
                 if (agent.isBuiltinLlm) {
@@ -705,7 +705,7 @@ export default function AgentsSection() {
                   return
                 }
                 const result = await window.api.checkTool(agent.checkCmd)
-                setAgentStates(prev => ({ ...prev, [agent.id]: { status: result.installed ? 'installed' : 'missing', version: result.version } }))
+                setAgentStates(prev => ({ ...prev, [agent.id]: { status: result.installed ? 'installed' : 'missing', version: result.version, configured: true } }))
               }))
             }}
             title="Re-check all agents"

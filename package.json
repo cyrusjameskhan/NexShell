@@ -1,6 +1,6 @@
 {
   "name": "nexshell",
-  "version": "0.1.2",
+  "version": "0.1.1",
   "description": "A sleek cross-platform terminal emulator with AI autocomplete, split panes, SSH/SFTP, and themes",
   "author": {
     "name": "Cyrus Khan",
