@@ -7,3 +7,4 @@ release/
 .DS_Store
 Thumbs.db
 *.log
+NexShell_Workspace.code-workspace

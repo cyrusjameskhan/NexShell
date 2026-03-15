@@ -18,6 +18,7 @@ const defaultSettings: AppSettings = {
   agentCommand: 'claude',
   logRetention: 100,
   opacity: 1,
+  alwaysOnTop: false,
 }
 
 export interface SshConnectionInfo {
@@ -560,5 +561,8 @@ export async function initStore() {
   })
   if (mergedSettings.opacity !== 1) {
     window.api.setOpacity(mergedSettings.opacity)
+  }
+  if (mergedSettings.alwaysOnTop) {
+    window.api.setAlwaysOnTop(true)
   }
 }

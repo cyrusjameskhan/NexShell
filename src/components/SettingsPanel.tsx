@@ -209,6 +209,17 @@ export default function SettingsPanel() {
                   <option value={-1}>Keep forever</option>
                 </select>
               </SettingRow>
+
+              <SettingRow label="Always on Top" ui={ui}>
+                <Toggle
+                  value={localSettings.alwaysOnTop ?? false}
+                  onChange={v => {
+                    save({ alwaysOnTop: v })
+                    window.api.setAlwaysOnTop(v)
+                  }}
+                  ui={ui}
+                />
+              </SettingRow>
             </div>
           )}
 

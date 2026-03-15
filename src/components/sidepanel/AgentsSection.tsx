@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useStore } from '../../hooks'
 import { createTab, setState, setActiveTab, getState } from '../../store'
 
@@ -12,7 +12,10 @@ interface AgentTool {
   category: string
   checkCmd: string
   installCmds: { win?: string; mac?: string; linux?: string }
+  setupCmd?: string
   launchCmd?: string
+  /** Path (supports ~) to check if agent has been configured. If absent, assume configured. */
+  configPath?: string
   homepage?: string
   docsUrl?: string
 }
@@ -24,7 +27,7 @@ const AGENTS: AgentTool[] = [
     name: 'Claude Code',
     command: 'claude',
     category: 'Anthropic',
-    description: 'Agentic coding assistant from Anthropic — works inside your terminal',
+    description: 'Agentic coding assistant from Anthropic — prompts for login automatically on first run',
     checkCmd: 'claude --version',
     installCmds: {
       win: 'npm install -g @anthropic-ai/claude-code',
@@ -40,7 +43,7 @@ const AGENTS: AgentTool[] = [
     name: 'Codex CLI',
     command: 'codex',
     category: 'OpenAI',
-    description: 'OpenAI Codex CLI — interactive coding agent in your terminal',
+    description: 'OpenAI Codex CLI — prompts for login automatically on first run',
     checkCmd: 'codex --version',
     installCmds: {
       win: 'npm install -g @openai/codex',
@@ -56,7 +59,7 @@ const AGENTS: AgentTool[] = [
     name: 'Aider',
     command: 'aider',
     category: 'Open Source',
-    description: 'AI pair programming in your terminal — works with GPT-4, Claude & local models',
+    description: 'AI pair programming in your terminal — set OPENAI_API_KEY or ANTHROPIC_API_KEY before launching',
     checkCmd: 'aider --version',
     installCmds: {
       win: 'pip install aider-chat',
@@ -79,6 +82,8 @@ const AGENTS: AgentTool[] = [
       mac: 'pip install openhands-ai',
       linux: 'pip install openhands-ai',
     },
+    setupCmd: 'openhands login',
+    configPath: '~/.openhands/settings.json',
     homepage: 'https://www.all-hands.dev',
     docsUrl: 'https://docs.all-hands.dev',
   },
@@ -88,7 +93,7 @@ const AGENTS: AgentTool[] = [
     name: 'Gemini CLI',
     command: 'gemini',
     category: 'Google',
-    description: "Google's Gemini AI coding agent for the command line",
+    description: "Google's Gemini AI coding agent — prompts for Google login automatically on first run",
     checkCmd: 'gemini --version',
     installCmds: {
       win: 'npm install -g @google/gemini-cli',
@@ -98,21 +103,23 @@ const AGENTS: AgentTool[] = [
     homepage: 'https://github.com/google-gemini/gemini-cli',
     docsUrl: 'https://github.com/google-gemini/gemini-cli#readme',
   },
-  // Amazon Q
+  // Kiro CLI (formerly Amazon Q Developer CLI)
   {
-    id: 'amazonq',
-    name: 'Amazon Q',
-    command: 'q',
+    id: 'kiro',
+    name: 'Kiro CLI',
+    command: 'kiro-cli',
     category: 'AWS',
-    description: 'AWS AI coding assistant and CLI agent by Amazon',
-    checkCmd: 'q --version',
+    description: 'AWS AI coding agent — chat, custom agents, MCP support (formerly Amazon Q Developer CLI)',
+    checkCmd: 'kiro-cli --version',
     installCmds: {
-      win: 'winget install --id Amazon.AmazonQ -e',
-      mac: 'brew install amazon-q',
-      linux: 'pip install amazon-q-cli',
+      win: 'winget install --id Amazon.KiroCLI -e',
+      mac: 'curl -fsSL https://cli.kiro.dev/install | bash',
+      linux: 'curl -fsSL https://cli.kiro.dev/install | bash',
     },
-    homepage: 'https://aws.amazon.com/q/developer',
-    docsUrl: 'https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line.html',
+    setupCmd: 'kiro-cli login',
+    launchCmd: 'kiro-cli chat',
+    homepage: 'https://kiro.dev',
+    docsUrl: 'https://kiro.dev/docs/cli',
   },
   // Goose
   {
@@ -127,24 +134,30 @@ const AGENTS: AgentTool[] = [
       mac: 'brew install block/goose/goose',
       linux: 'curl -fsSL https://github.com/block/goose/releases/latest/download/install.sh | sh',
     },
+    setupCmd: 'goose configure',
+    launchCmd: 'goose session',
+    configPath: '~/.config/goose/config.yaml',
     homepage: 'https://block.github.io/goose',
     docsUrl: 'https://block.github.io/goose/docs',
   },
-  // Cursor (via CLI)
+  // Continue
   {
     id: 'continue',
     name: 'Continue',
-    command: 'continue',
+    command: 'cn',
     category: 'Open Source',
     description: 'Open-source AI coding agent — connects to any model via config',
-    checkCmd: 'continue --version',
+    checkCmd: 'cn --version',
     installCmds: {
-      win: 'npm install -g @continuedev/continue',
-      mac: 'npm install -g @continuedev/continue',
-      linux: 'npm install -g @continuedev/continue',
+      win: 'curl -fsSL https://raw.githubusercontent.com/continuedev/continue/main/extensions/cli/scripts/install.sh | bash',
+      mac: 'curl -fsSL https://raw.githubusercontent.com/continuedev/continue/main/extensions/cli/scripts/install.sh | bash',
+      linux: 'curl -fsSL https://raw.githubusercontent.com/continuedev/continue/main/extensions/cli/scripts/install.sh | bash',
     },
+    setupCmd: 'cn login',
+    launchCmd: 'cn',
+    configPath: '~/.continue/config.yaml',
     homepage: 'https://continue.dev',
-    docsUrl: 'https://docs.continue.dev',
+    docsUrl: 'https://docs.continue.dev/cli',
   },
   // OpenClaw
   {
@@ -152,14 +165,16 @@ const AGENTS: AgentTool[] = [
     name: 'OpenClaw',
     command: 'openclaw',
     category: 'Open Source',
-    description: 'Open-source AI coding assistant with 40+ CLI commands and multi-agent support',
+    description: 'Open-source AI coding assistant with multi-agent support and 40+ CLI commands',
     checkCmd: 'openclaw --version',
     installCmds: {
       win: 'npm install -g openclaw@latest',
       mac: 'curl -fsSL https://openclaw.ai/install.sh | bash',
       linux: 'curl -fsSL https://openclaw.ai/install.sh | bash',
     },
-    launchCmd: 'openclaw agent',
+    setupCmd: 'openclaw onboard',
+    launchCmd: 'openclaw gateway',
+    configPath: '~/.openclaw',
     homepage: 'https://openclawlab.com',
     docsUrl: 'https://docs.openclaw.ai/cli',
   },
@@ -176,9 +191,30 @@ const AGENTS: AgentTool[] = [
       mac: 'curl -fsSL https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw_Darwin_arm64.tar.gz | tar -xz -C /usr/local/bin',
       linux: 'curl -fsSL https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin',
     },
+    setupCmd: 'picoclaw onboard',
     launchCmd: 'picoclaw agent',
+    configPath: '~/.picoclaw/config.json',
     homepage: 'https://github.com/sipeed/picoclaw',
     docsUrl: 'https://docs.picoclaw.io/docs/getting-started',
+  },
+  // Hermes (Nous Research)
+  {
+    id: 'hermes',
+    name: 'Hermes',
+    command: 'hermes',
+    category: 'Open Source',
+    description: 'Self-improving AI coding agent by Nous Research — TUI, skills, multi-provider (OpenRouter, Anthropic, Ollama)',
+    checkCmd: 'hermes --version',
+    installCmds: {
+      win: 'wsl bash -c "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"',
+      mac: 'curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash',
+      linux: 'curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash',
+    },
+    setupCmd: 'hermes setup',
+    launchCmd: 'hermes',
+    configPath: '~/.hermes/config.yaml',
+    homepage: 'https://hermes-agent.nousresearch.com',
+    docsUrl: 'https://hermes-agent.nousresearch.com/docs/user-guide/cli',
   },
 ]
 
@@ -221,11 +257,15 @@ const AGENT_ICONS: Record<string, React.ReactNode> = {
       <path d="M10 24 C10 24 24 18 38 24 C38 24 24 30 10 24Z" fill="white" opacity="0.8"/>
     </svg>
   ),
-  amazonq: (
+  kiro: (
     <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="48" height="48" rx="10" fill="#FF9900"/>
-      <path d="M24 12C17.373 12 12 17.373 12 24C12 30.627 17.373 36 24 36C27.2 36 30.1 34.76 32.28 32.72L35 35.44C32.08 38.12 28.24 40 24 40C15.163 40 8 32.837 8 24C8 15.163 15.163 8 24 8C32.837 8 40 15.163 40 24H36C36 17.373 30.627 12 24 12Z" fill="white"/>
-      <path d="M36 24L40 28L44 24" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <rect width="48" height="48" rx="10" fill="#232F3E"/>
+      {/* AWS orange accent bar */}
+      <rect x="8" y="34" width="32" height="4" rx="2" fill="#FF9900"/>
+      {/* "K" letterform */}
+      <path d="M14 12V36M14 24L28 12M14 24L28 36" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+      {/* Kiro dot accent */}
+      <circle cx="35" cy="14" r="3.5" fill="#FF9900"/>
     </svg>
   ),
   goose: (
@@ -316,6 +356,25 @@ const AGENT_ICONS: Record<string, React.ReactNode> = {
       <path d="M27 15 L31 9" stroke="#1abc9c" strokeWidth="1.2" strokeLinecap="round"/>
     </svg>
   ),
+  hermes: (
+    // Caduceus-inspired — Hermes messenger god, Nous Research branding
+    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="48" height="48" rx="10" fill="#0f172a"/>
+      {/* Staff */}
+      <path d="M24 8 L24 40" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round"/>
+      {/* Serpent left */}
+      <path d="M24 14 Q18 18 20 24 Q22 30 24 34" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" fill="none"/>
+      {/* Serpent right */}
+      <path d="M24 14 Q30 18 28 24 Q26 30 24 34" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" fill="none"/>
+      {/* Wings */}
+      <path d="M24 10 L16 6" stroke="#60a5fa" strokeWidth="2.5" strokeLinecap="round"/>
+      <path d="M24 10 L32 6" stroke="#60a5fa" strokeWidth="2.5" strokeLinecap="round"/>
+      <path d="M14 8 Q20 10 24 12" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round" fill="none"/>
+      <path d="M34 8 Q28 10 24 12" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round" fill="none"/>
+      {/* Top orb */}
+      <circle cx="24" cy="8" r="2.5" fill="#60a5fa"/>
+    </svg>
+  ),
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -325,14 +384,7 @@ type DetectionStatus = 'idle' | 'checking' | 'installed' | 'missing'
 interface AgentState {
   status: DetectionStatus
   version: string | null
-}
-
-type InstallPhase = 'running' | 'done' | 'failed'
-
-interface InstallState {
-  agent: AgentTool
-  sessionId: string
-  phase: InstallPhase
+  configured: boolean
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -344,7 +396,6 @@ export default function AgentsSection() {
   const [agentStates, setAgentStates] = useState<Record<string, AgentState>>({})
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
-  const [installing, setInstalling] = useState<InstallState | null>(null)
   const unlistenRef = useRef<(() => void) | null>(null)
 
   const platform: 'win' | 'mac' | 'linux' =
@@ -358,20 +409,25 @@ export default function AgentsSection() {
   useEffect(() => {
     setAgentStates(() => {
       const next: Record<string, AgentState> = {}
-      for (const agent of AGENTS) next[agent.id] = { status: 'checking', version: null }
+      for (const agent of AGENTS) next[agent.id] = { status: 'checking', version: null, configured: true }
       return next
     })
 
     Promise.all(
       AGENTS.map(async agent => {
-        const result = await window.api.checkTool(agent.checkCmd)
-        return { id: agent.id, ...result }
+        const [toolResult, configured] = await Promise.all([
+          window.api.checkTool(agent.checkCmd),
+          agent.configPath
+            ? window.api.checkAgentConfigured(agent.configPath)
+            : Promise.resolve(true),
+        ])
+        return { id: agent.id, ...toolResult, configured }
       })
     ).then(results => {
       setAgentStates(() => {
         const next: Record<string, AgentState> = {}
         for (const r of results) {
-          next[r.id] = { status: r.installed ? 'installed' : 'missing', version: r.version }
+          next[r.id] = { status: r.installed ? 'installed' : 'missing', version: r.version, configured: r.configured }
         }
         return next
       })
@@ -383,11 +439,16 @@ export default function AgentsSection() {
   }, [])
 
   const recheckAgent = useCallback(async (agent: AgentTool) => {
-    setAgentStates(prev => ({ ...prev, [agent.id]: { status: 'checking', version: null } }))
-    const result = await window.api.checkTool(agent.checkCmd)
+    setAgentStates(prev => ({ ...prev, [agent.id]: { ...prev[agent.id], status: 'checking', version: null } }))
+    const [result, configured] = await Promise.all([
+      window.api.checkTool(agent.checkCmd),
+      agent.configPath
+        ? window.api.checkAgentConfigured(agent.configPath)
+        : Promise.resolve(true),
+    ])
     setAgentStates(prev => ({
       ...prev,
-      [agent.id]: { status: result.installed ? 'installed' : 'missing', version: result.version },
+      [agent.id]: { status: result.installed ? 'installed' : 'missing', version: result.version, configured },
     }))
   }, [])
 
@@ -409,6 +470,18 @@ export default function AgentsSection() {
     }, 700)
   }
 
+  function setupAgent(agent: AgentTool) {
+    if (!agent.setupCmd) return
+    const session = createTab()
+    setTimeout(async () => {
+      await window.api.installTool(session.id, agent.setupCmd!)
+      const { tabs } = getState()
+      const idx = tabs.findIndex(t => t.kind === 'session' && t.sessionId === session.id)
+      if (idx !== -1) setActiveTab(idx)
+      setState({ sidePanelOpen: false })
+    }, 700)
+  }
+
   function installAgent(agent: AgentTool) {
     const cmd = agent.installCmds[platform]
     if (!cmd) return
@@ -417,7 +490,12 @@ export default function AgentsSection() {
     unlistenRef.current = null
 
     const session = createTab()
-    setInstalling({ agent, sessionId: session.id, phase: 'running' })
+
+    // Go straight to the terminal so the user can interact with prompts
+    const { tabs } = getState()
+    const idx = tabs.findIndex(t => t.kind === 'session' && t.sessionId === session.id)
+    if (idx !== -1) setActiveTab(idx)
+    setState({ sidePanelOpen: false })
 
     setTimeout(async () => {
       await window.api.installTool(session.id, cmd)
@@ -436,14 +514,12 @@ export default function AgentsSection() {
             ...prev,
             [agent.id]: { status: 'installed', version: result.version },
           }))
-          setInstalling(prev => prev ? { ...prev, phase: 'done' } : null)
         } else if (attemptsLeft > 0) {
           pollTimer = setTimeout(() => pollUntilInstalled(attemptsLeft - 1), 3000)
         } else {
           resolved = true
           unlisten()
           unlistenRef.current = null
-          setInstalling(prev => prev && prev.phase === 'running' ? { ...prev, phase: 'failed' } : prev)
         }
       }
 
@@ -466,7 +542,6 @@ export default function AgentsSection() {
           if (quietTimer) clearTimeout(quietTimer)
           unlisten()
           unlistenRef.current = null
-          setInstalling(prev => prev ? { ...prev, phase: 'failed' } : null)
           return
         }
 
@@ -483,28 +558,9 @@ export default function AgentsSection() {
           if (pollTimer) clearTimeout(pollTimer)
           unlisten()
           unlistenRef.current = null
-          setInstalling(prev =>
-            prev && prev.phase === 'running' ? { ...prev, phase: 'failed' } : prev
-          )
         }
       }, 300_000)
     }, 700)
-  }
-
-  function goToShell() {
-    if (installing) {
-      const { tabs } = getState()
-      const idx = tabs.findIndex(t => t.kind === 'session' && t.sessionId === installing.sessionId)
-      if (idx !== -1) setActiveTab(idx)
-    }
-    setState({ sidePanelOpen: false })
-    setInstalling(null)
-  }
-
-  function dismissInstall() {
-    unlistenRef.current?.()
-    unlistenRef.current = null
-    setInstalling(null)
   }
 
   const filtered = AGENTS.filter(a => {
@@ -601,13 +657,14 @@ export default function AgentsSection() {
                 <AgentRow
                   key={agent.id}
                   agent={agent}
-                  state={agentStates[agent.id] ?? { status: 'idle', version: null }}
+                  state={agentStates[agent.id] ?? { status: 'idle', version: null, configured: true }}
                   platform={platform}
                   ui={ui}
                   isDefault={defaultAgentCommand === agent.command}
                   onInstall={() => installAgent(agent)}
                   onRecheck={() => recheckAgent(agent)}
                   onLaunch={() => launchAgent(agent)}
+                  onSetup={() => setupAgent(agent)}
                   onSetDefault={() => setDefaultAgent(agent.command)}
                 />
               ))}
@@ -624,15 +681,6 @@ export default function AgentsSection() {
         )}
       </div>
 
-      {/* Install overlay */}
-      {installing && (
-        <InstallOverlay
-          state={installing}
-          ui={ui}
-          onDismiss={dismissInstall}
-          onGoToShell={goToShell}
-        />
-      )}
     </div>
   )
 }
@@ -646,7 +694,9 @@ function DefaultAgentBanner({ defaultCommand, agents, agentStates, ui }: {
   ui: any
 }) {
   const defaultAgent = agents.find(a => a.command === defaultCommand)
-  const isInstalled = defaultAgent ? agentStates[defaultAgent.id]?.status === 'installed' : false
+  const defaultState = defaultAgent ? agentStates[defaultAgent.id] : undefined
+  const isInstalled = defaultState?.status === 'installed'
+  const needsSetup = isInstalled && !!defaultAgent?.setupCmd && defaultState?.configured === false
 
   return (
     <div style={{
@@ -676,12 +726,17 @@ function DefaultAgentBanner({ defaultCommand, agents, agentStates, ui }: {
             <span style={{ fontSize: 12, fontWeight: 600, color: ui.text }}>
               {defaultAgent ? defaultAgent.name : defaultCommand}
             </span>
-            {isInstalled && (
+            {isInstalled && !needsSetup && (
               <span style={{ fontSize: 9, color: ui.success, background: `${ui.success}18`, padding: '1px 5px', borderRadius: 3, fontWeight: 500 }}>
                 ready
               </span>
             )}
-            {defaultAgent && !isInstalled && agentStates[defaultAgent.id]?.status === 'missing' && (
+            {needsSetup && (
+              <span style={{ fontSize: 9, color: ui.warning, background: `${ui.warning}18`, padding: '1px 5px', borderRadius: 3, fontWeight: 500 }}>
+                setup needed
+              </span>
+            )}
+            {defaultAgent && !isInstalled && defaultState?.status === 'missing' && (
               <span style={{ fontSize: 9, color: ui.warning, background: `${ui.warning}18`, padding: '1px 5px', borderRadius: 3, fontWeight: 500 }}>
                 not installed
               </span>
@@ -712,7 +767,7 @@ function DefaultAgentBanner({ defaultCommand, agents, agentStates, ui }: {
 
 // ── Agent Row ──────────────────────────────────────────────────────────────────
 
-function AgentRow({ agent, state, platform, ui, isDefault, onInstall, onRecheck, onLaunch, onSetDefault }: {
+function AgentRow({ agent, state, platform, ui, isDefault, onInstall, onRecheck, onLaunch, onSetup, onSetDefault }: {
   agent: AgentTool
   state: AgentState
   platform: 'win' | 'mac' | 'linux'
@@ -721,12 +776,14 @@ function AgentRow({ agent, state, platform, ui, isDefault, onInstall, onRecheck,
   onInstall: () => void
   onRecheck: () => void
   onLaunch: () => void
+  onSetup: () => void
   onSetDefault: () => void
 }) {
   const [hovered, setHovered] = useState(false)
   const hasInstallCmd = !!agent.installCmds[platform]
   const icon = AGENT_ICONS[agent.id]
   const isInstalled = state.status === 'installed'
+  const needsSetup = isInstalled && !!agent.setupCmd && !state.configured
 
   return (
     <div
@@ -759,7 +816,7 @@ function AgentRow({ agent, state, platform, ui, isDefault, onInstall, onRecheck,
             : <span style={{ fontSize: 11, fontWeight: 700, color: ui.textMuted }}>{agent.name.slice(0, 2).toUpperCase()}</span>
           }
         </div>
-        {/* Status badge */}
+        {/* Status badge — shows warning dot if installed but not configured */}
         <div style={{
           position: 'absolute', bottom: -2, right: -2,
           width: 12, height: 12, borderRadius: '50%',
@@ -771,6 +828,8 @@ function AgentRow({ agent, state, platform, ui, isDefault, onInstall, onRecheck,
             <svg style={{ animation: 'spin 1s linear infinite' }} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={ui.textDim} strokeWidth="3">
               <circle cx="12" cy="12" r="9" strokeDasharray="30 20" strokeLinecap="round" />
             </svg>
+          ) : state.status === 'installed' && needsSetup ? (
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: ui.warning }} />
           ) : state.status === 'installed' ? (
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={ui.success} strokeWidth="3.5" strokeLinecap="round">
               <polyline points="20 6 9 17 4 12" />
@@ -803,6 +862,11 @@ function AgentRow({ agent, state, platform, ui, isDefault, onInstall, onRecheck,
               v{state.version}
             </span>
           )}
+          {needsSetup && (
+            <span style={{ fontSize: 9, color: ui.warning, background: `${ui.warning}18`, padding: '1px 5px', borderRadius: 3, fontWeight: 500 }}>
+              setup needed
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 10, color: ui.textDim, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {agent.description}
@@ -810,14 +874,26 @@ function AgentRow({ agent, state, platform, ui, isDefault, onInstall, onRecheck,
       </div>
 
       {/* Actions */}
-      <div style={{ display: 'flex', gap: 3, flexShrink: 0, opacity: hovered ? 1 : (state.status === 'missing' ? 0.6 : 0), transition: 'opacity 0.15s' }}>
+      <div style={{ display: 'flex', gap: 3, flexShrink: 0, opacity: hovered ? 1 : (state.status === 'missing' || needsSetup ? 0.6 : 0), transition: 'opacity 0.15s' }}>
         {isInstalled ? (
           <>
-            <SmallBtn label="Launch" accent ui={ui} onClick={onLaunch} />
+            {needsSetup ? (
+              <>
+                <SmallBtn label="Setup" accent ui={ui} onClick={onSetup} title={`Run: ${agent.setupCmd}`} />
+                <SmallBtn label="Launch" ui={ui} onClick={onLaunch} title="Launch anyway (setup recommended first)" />
+              </>
+            ) : (
+              <>
+                <SmallBtn label="Launch" accent ui={ui} onClick={onLaunch} />
+                {agent.setupCmd && (
+                  <SmallBtn label="Re-setup" ui={ui} onClick={onSetup} title={`Run: ${agent.setupCmd}`} />
+                )}
+              </>
+            )}
             {!isDefault && (
               <SmallBtn label="Set Default" ui={ui} onClick={onSetDefault} title="Set as default agent" />
             )}
-            <SmallBtn label="↺" ui={ui} onClick={onRecheck} title="Re-check version" />
+            <SmallBtn label="↺" ui={ui} onClick={onRecheck} title="Re-check version and config" />
           </>
         ) : state.status === 'missing' && hasInstallCmd ? (
           <SmallBtn label="Install" accent ui={ui} onClick={onInstall} />
@@ -837,126 +913,7 @@ function AgentRow({ agent, state, platform, ui, isDefault, onInstall, onRecheck,
   )
 }
 
-// ── Install Overlay ───────────────────────────────────────────────────────────
-
-function InstallOverlay({ state, ui, onDismiss, onGoToShell }: {
-  state: InstallState
-  ui: any
-  onDismiss: () => void
-  onGoToShell: () => void
-}) {
-  const { agent, phase } = state
-  const isRunning = phase === 'running'
-  const isDone = phase === 'done'
-  const isFailed = phase === 'failed'
-
-  return (
-    <div style={{
-      position: 'absolute', inset: 0,
-      background: 'rgba(0,0,0,0.65)',
-      backdropFilter: 'blur(4px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 50, padding: 24,
-    }}>
-      <div style={{
-        background: ui.bgSecondary,
-        border: `1px solid ${isFailed ? ui.danger + '55' : isDone ? ui.success + '55' : ui.border}`,
-        borderRadius: 12,
-        padding: '28px 24px 20px',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
-        boxShadow: `0 16px 48px ${ui.shadow}`,
-        width: '100%', maxWidth: 300,
-        transition: 'border-color 0.3s',
-      }}>
-        {/* Animated icon */}
-        <div style={{ position: 'relative', width: 52, height: 52 }}>
-          {isRunning && (
-            <svg style={{ position: 'absolute', inset: 0, animation: 'spin 1s linear infinite' }} width="52" height="52" viewBox="0 0 52 52">
-              <circle cx="26" cy="26" r="22" fill="none" stroke={ui.accent} strokeWidth="3" strokeDasharray="100 40" strokeLinecap="round" />
-            </svg>
-          )}
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {isDone ? (
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={ui.success} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            ) : isFailed ? (
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={ui.danger} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
-              </svg>
-            ) : (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={ui.accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-            )}
-          </div>
-        </div>
-
-        {/* Agent icon */}
-        {AGENT_ICONS[agent.id] && (
-          <div style={{ width: 40, height: 40, borderRadius: 10, overflow: 'hidden', flexShrink: 0 }}>
-            {AGENT_ICONS[agent.id]}
-          </div>
-        )}
-
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: ui.text, marginBottom: 4 }}>
-            {isDone ? `${agent.name} installed!` : isFailed ? 'Install failed' : `Installing ${agent.name}...`}
-          </div>
-          <div style={{ fontSize: 11, color: ui.textDim }}>
-            {isDone ? 'Agent is ready to launch.' : isFailed ? 'Check the terminal for details.' : 'Running in a new terminal pane.'}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
-          <PhaseStep label="Launching terminal" done active={false} ui={ui} />
-          <PhaseStep label="Running installer" done={isDone} active={isRunning} failed={isFailed} ui={ui} />
-          <PhaseStep label="Verifying install" done={isDone} active={false} ui={ui} />
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-          {isFailed ? (
-            <>
-              <button onClick={onDismiss} style={overlayBtnStyle(ui, false)}>Dismiss</button>
-              <button onClick={onGoToShell} style={overlayBtnStyle(ui, true)}>View Terminal</button>
-            </>
-          ) : isDone ? (
-            <button onClick={onDismiss} style={overlayBtnStyle(ui, true)}>Done</button>
-          ) : (
-            <>
-              <button onClick={onDismiss} style={overlayBtnStyle(ui, false)}>Cancel</button>
-              <button onClick={onGoToShell} style={overlayBtnStyle(ui, true)}>View Terminal</button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── Small helpers ─────────────────────────────────────────────────────────────
-
-function PhaseStep({ label, done, active, failed, ui }: { label: string; done: boolean; active: boolean; failed?: boolean; ui: any }) {
-  const color = failed ? ui.danger : done ? ui.success : active ? ui.accent : ui.textDim
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        {done ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={ui.success} strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
-        ) : failed ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={ui.danger} strokeWidth="3" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
-        ) : active ? (
-          <svg style={{ animation: 'spin 1s linear infinite' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={ui.accent} strokeWidth="2.5"><circle cx="12" cy="12" r="9" strokeDasharray="30 20" strokeLinecap="round" /></svg>
-        ) : (
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: ui.textDim, margin: '0 auto' }} />
-        )}
-      </div>
-      <span style={{ fontSize: 11, color, transition: 'color 0.2s' }}>{label}</span>
-    </div>
-  )
-}
 
 function CategoryPill({ label, active, onClick, ui }: { label: string; active: boolean; onClick: () => void; ui: any }) {
   return (
@@ -997,12 +954,3 @@ function SmallBtn({ label, ui, onClick, accent, danger, title }: { label: string
   )
 }
 
-function overlayBtnStyle(ui: any, primary: boolean): React.CSSProperties {
-  return {
-    flex: 1, padding: '7px 12px', fontSize: 12, fontWeight: primary ? 600 : 400,
-    background: primary ? ui.accent : ui.bgTertiary,
-    border: primary ? 'none' : `1px solid ${ui.border}`,
-    borderRadius: 6, color: primary ? ui.bg : ui.textMuted,
-    cursor: 'pointer', transition: 'opacity 0.15s',
-  }
-}

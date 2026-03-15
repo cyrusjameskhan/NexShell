@@ -113,6 +113,8 @@ export interface AppSettings {
   logRetention: number
   /** Window opacity 0.1–1.0 */
   opacity: number
+  /** Keep the window above all others */
+  alwaysOnTop: boolean
 }
 
 export type SidePanelSection = 'hosts' | 'agents' | 'variables' | 'snippets' | 'logs' | 'libraries'
@@ -227,6 +229,7 @@ declare global {
       getSettings: () => Promise<AppSettings | null>
       setSettings: (settings: AppSettings) => Promise<void>
       setOpacity: (opacity: number) => Promise<void>
+      setAlwaysOnTop: (flag: boolean) => Promise<void>
       getSidebarState: () => Promise<{ section: SidePanelSection | null; width: number } | null>
       setSidebarState: (state: { section: SidePanelSection | null; width: number }) => Promise<void>
       getHosts: () => Promise<SshHost[]>
@@ -256,6 +259,7 @@ declare global {
       showSaveDialog: (options: { defaultPath?: string; title?: string }) => Promise<string | null>
       checkTool: (cmd: string) => Promise<{ installed: boolean; version: string | null }>
       installTool: (sessionId: string, cmd: string) => Promise<void>
+      checkAgentConfigured: (configPath: string) => Promise<boolean>
       openExternal: (url: string) => Promise<void>
       getLogs: () => Promise<SessionLog[]>
       addLog: (log: SessionLog) => Promise<void>

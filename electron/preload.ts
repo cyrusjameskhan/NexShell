@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
   setFullScreen: (flag: boolean) => ipcRenderer.send('window:setFullScreen', flag),
   setOpacity: (opacity: number) => ipcRenderer.invoke('window:setOpacity', opacity),
+  setAlwaysOnTop: (flag: boolean) => ipcRenderer.invoke('window:setAlwaysOnTop', flag),
 
   // PTY
   createPty: (sessionId: string, cols: number, rows: number, sessionName?: string) =>
@@ -91,6 +92,7 @@ contextBridge.exposeInMainWorld('api', {
   // Libraries
   checkTool: (cmd: string) => ipcRenderer.invoke('libraries:checkTool', cmd),
   installTool: (sessionId: string, cmd: string) => ipcRenderer.invoke('libraries:installTool', sessionId, cmd),
+  checkAgentConfigured: (configPath: string) => ipcRenderer.invoke('agents:checkConfigured', configPath),
 
   // Shell
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),

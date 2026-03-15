@@ -92,16 +92,32 @@ globalStyle.textContent = `
 }
 
 @keyframes grain-shift {
-  0%, 100% { transform: translate(0, 0); }
-  10% { transform: translate(-1%, -1%); }
-  20% { transform: translate(1%, 0.5%); }
-  30% { transform: translate(-0.5%, 1%); }
-  40% { transform: translate(0.5%, -0.5%); }
-  50% { transform: translate(-1%, 0.5%); }
-  60% { transform: translate(1%, -1%); }
-  70% { transform: translate(0, 1%); }
-  80% { transform: translate(-0.5%, -0.5%); }
-  90% { transform: translate(0.5%, 0); }
+  0%  { transform: translate(0, 0); }
+  4%  { transform: translate(-5%, 3%); }
+  8%  { transform: translate(2%, -6%); }
+  12% { transform: translate(6%, 1%); }
+  16% { transform: translate(-3%, -4%); }
+  20% { transform: translate(4%, 5%); }
+  24% { transform: translate(-7%, -2%); }
+  28% { transform: translate(1%, 6%); }
+  32% { transform: translate(5%, -3%); }
+  36% { transform: translate(-4%, 7%); }
+  40% { transform: translate(3%, -5%); }
+  44% { transform: translate(-6%, 2%); }
+  48% { transform: translate(7%, -1%); }
+  52% { transform: translate(-2%, 4%); }
+  56% { transform: translate(5%, -7%); }
+  60% { transform: translate(-3%, 6%); }
+  64% { transform: translate(6%, 3%); }
+  68% { transform: translate(-5%, -6%); }
+  72% { transform: translate(2%, 7%); }
+  76% { transform: translate(-7%, -3%); }
+  80% { transform: translate(4%, -2%); }
+  84% { transform: translate(-1%, 5%); }
+  88% { transform: translate(7%, -4%); }
+  92% { transform: translate(-6%, 1%); }
+  96% { transform: translate(3%, -7%); }
+  100% { transform: translate(0, 0); }
 }
 `
 document.head.appendChild(globalStyle)

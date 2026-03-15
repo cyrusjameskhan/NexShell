@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useStore } from '../../hooks'
 import { createTab, setState, setActiveTab, getState } from '../../store'
 import { LibraryTool } from '../../types'
@@ -420,14 +420,6 @@ interface ToolState {
   version: string | null
 }
 
-type InstallPhase = 'running' | 'done' | 'failed'
-
-interface InstallState {
-  tool: LibraryTool
-  sessionId: string
-  phase: InstallPhase
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function LibrariesSection() {
@@ -437,7 +429,6 @@ export default function LibrariesSection() {
   const [toolStates, setToolStates] = useState<Record<string, ToolState>>({})
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
-  const [installing, setInstalling] = useState<InstallState | null>(null)
   const unlistenRef = useRef<(() => void) | null>(null)
 
   const platform: 'win' | 'mac' | 'linux' =
@@ -497,7 +488,12 @@ export default function LibrariesSection() {
     unlistenRef.current = null
 
     const session = createTab()
-    setInstalling({ tool, sessionId: session.id, phase: 'running' })
+
+    // Go straight to the terminal so the user can interact with prompts
+    const { tabs } = getState()
+    const idx = tabs.findIndex(t => t.kind === 'session' && t.sessionId === session.id)
+    if (idx !== -1) setActiveTab(idx)
+    setState({ sidePanelOpen: false })
 
     // Wait for the PTY to initialise before writing
     setTimeout(async () => {
@@ -520,15 +516,12 @@ export default function LibrariesSection() {
             ...prev,
             [tool.id]: { status: 'installed', version: result.version },
           }))
-          setInstalling(prev => prev ? { ...prev, phase: 'done' } : null)
         } else if (attemptsLeft > 0) {
           pollTimer = setTimeout(() => pollUntilInstalled(attemptsLeft - 1), 3000)
         } else {
-          // Gave up polling — mark failed so the user knows something went wrong
           resolved = true
           unlisten()
           unlistenRef.current = null
-          setInstalling(prev => prev && prev.phase === 'running' ? { ...prev, phase: 'failed' } : prev)
         }
       }
 
@@ -555,7 +548,6 @@ export default function LibrariesSection() {
           if (quietTimer) clearTimeout(quietTimer)
           unlisten()
           unlistenRef.current = null
-          setInstalling(prev => prev ? { ...prev, phase: 'failed' } : null)
           return
         }
 
@@ -577,28 +569,9 @@ export default function LibrariesSection() {
           if (pollTimer) clearTimeout(pollTimer)
           unlisten()
           unlistenRef.current = null
-          setInstalling(prev =>
-            prev && prev.phase === 'running' ? { ...prev, phase: 'failed' } : prev
-          )
         }
       }, 300_000)
     }, 700)
-  }
-
-  function goToShell() {
-    if (installing) {
-      const { tabs } = getState()
-      const idx = tabs.findIndex(t => t.kind === 'session' && t.sessionId === installing.sessionId)
-      if (idx !== -1) setActiveTab(idx)
-    }
-    setState({ sidePanelOpen: false })
-    setInstalling(null)
-  }
-
-  function dismissInstall() {
-    unlistenRef.current?.()
-    unlistenRef.current = null
-    setInstalling(null)
   }
 
   const filtered = TOOLS.filter(t => {
@@ -715,15 +688,6 @@ export default function LibrariesSection() {
         )}
       </div>
 
-      {/* Install overlay */}
-      {installing && (
-        <InstallOverlay
-          state={installing}
-          ui={ui}
-          onDismiss={dismissInstall}
-          onGoToShell={goToShell}
-        />
-      )}
     </div>
   )
 }
@@ -824,122 +788,7 @@ function ToolRow({ tool, state, platform, ui, onInstall, onRecheck }: {
   )
 }
 
-// ── Install Overlay ───────────────────────────────────────────────────────────
-
-function InstallOverlay({ state, ui, onDismiss, onGoToShell }: {
-  state: InstallState
-  ui: any
-  onDismiss: () => void
-  onGoToShell: () => void
-}) {
-  const { tool, phase } = state
-  const isRunning = phase === 'running'
-  const isDone = phase === 'done'
-  const isFailed = phase === 'failed'
-
-  return (
-    <div style={{
-      position: 'absolute', inset: 0,
-      background: 'rgba(0,0,0,0.65)',
-      backdropFilter: 'blur(4px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 50, padding: 24,
-    }}>
-      <div style={{
-        background: ui.bgSecondary,
-        border: `1px solid ${isFailed ? ui.danger + '55' : isDone ? ui.success + '55' : ui.border}`,
-        borderRadius: 12,
-        padding: '28px 24px 20px',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
-        boxShadow: `0 16px 48px ${ui.shadow}`,
-        width: '100%', maxWidth: 300,
-        transition: 'border-color 0.3s',
-      }}>
-        {/* Animated icon */}
-        <div style={{ position: 'relative', width: 52, height: 52 }}>
-          {isRunning && (
-            <svg style={{ position: 'absolute', inset: 0, animation: 'spin 1s linear infinite' }} width="52" height="52" viewBox="0 0 52 52">
-              <circle cx="26" cy="26" r="22" fill="none" stroke={ui.accent} strokeWidth="3" strokeDasharray="100 40" strokeLinecap="round" />
-            </svg>
-          )}
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {isDone ? (
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={ui.success} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            ) : isFailed ? (
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={ui.danger} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
-              </svg>
-            ) : (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={ui.accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-            )}
-          </div>
-        </div>
-
-        {/* Tool name */}
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: ui.text, marginBottom: 4 }}>
-            {isDone ? `${tool.name} installed!` : isFailed ? `Install failed` : `Installing ${tool.name}...`}
-          </div>
-          <div style={{ fontSize: 11, color: ui.textDim }}>
-            {isDone ? 'Tool is ready to use.' : isFailed ? 'Check the terminal for details.' : 'Running in a new terminal pane.'}
-          </div>
-        </div>
-
-        {/* Phase steps */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
-          <PhaseStep label="Launching terminal" done={phase !== 'running' || true} active={false} ui={ui} />
-          <PhaseStep label="Running installer" done={isDone} active={isRunning} failed={isFailed} ui={ui} />
-          <PhaseStep label="Verifying install" done={isDone} active={false} ui={ui} />
-        </div>
-
-        {/* Buttons */}
-        <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-          {isFailed ? (
-            <>
-              <button onClick={onDismiss} style={overlayBtnStyle(ui, false)}>Dismiss</button>
-              <button onClick={onGoToShell} style={overlayBtnStyle(ui, true)}>View Terminal</button>
-            </>
-          ) : isDone ? (
-            <button onClick={onDismiss} style={overlayBtnStyle(ui, true)}>Done</button>
-          ) : (
-            <>
-              <button onClick={onDismiss} style={overlayBtnStyle(ui, false)}>Cancel</button>
-              <button onClick={onGoToShell} style={overlayBtnStyle(ui, true)}>View Terminal</button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── Small helpers ─────────────────────────────────────────────────────────────
-
-function PhaseStep({ label, done, active, failed, ui }: { label: string; done: boolean; active: boolean; failed?: boolean; ui: any }) {
-  const color = failed ? ui.danger : done ? ui.success : active ? ui.accent : ui.textDim
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        {done ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={ui.success} strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
-        ) : failed ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={ui.danger} strokeWidth="3" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
-        ) : active ? (
-          <svg style={{ animation: 'spin 1s linear infinite' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={ui.accent} strokeWidth="2.5"><circle cx="12" cy="12" r="9" strokeDasharray="30 20" strokeLinecap="round" /></svg>
-        ) : (
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: ui.textDim, margin: '0 auto' }} />
-        )}
-      </div>
-      <span style={{ fontSize: 11, color, transition: 'color 0.2s' }}>{label}</span>
-    </div>
-  )
-}
 
 function CategoryPill({ label, active, onClick, ui }: { label: string; active: boolean; onClick: () => void; ui: any }) {
   return (
@@ -979,12 +828,3 @@ function SmallBtn({ label, ui, onClick, accent, danger }: { label: string; ui: a
   )
 }
 
-function overlayBtnStyle(ui: any, primary: boolean): React.CSSProperties {
-  return {
-    flex: 1, padding: '7px 12px', fontSize: 12, fontWeight: primary ? 600 : 400,
-    background: primary ? ui.accent : ui.bgTertiary,
-    border: primary ? 'none' : `1px solid ${ui.border}`,
-    borderRadius: 6, color: primary ? ui.bg : ui.textMuted,
-    cursor: 'pointer', transition: 'opacity 0.15s',
-  }
-}

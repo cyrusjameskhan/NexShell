@@ -82,6 +82,9 @@ ipcMain.on('window:setFullScreen', (_event, flag: boolean) => mainWindow?.setFul
 ipcMain.handle('window:setOpacity', (_event, opacity: number) => {
   if (mainWindow) mainWindow.setOpacity(Math.max(0.1, Math.min(1, opacity)))
 })
+ipcMain.handle('window:setAlwaysOnTop', (_event, flag: boolean) => {
+  if (mainWindow) mainWindow.setAlwaysOnTop(flag)
+})
 
 
 // ── PTY Management ──
@@ -927,6 +930,12 @@ ipcMain.handle('libraries:installTool', async (_event, sessionId: string, cmd: s
   const session = sessions.get(sessionId)
   if (!session) return
   session.process.write(cmd + '\r')
+})
+
+// ── Agent config detection ──
+ipcMain.handle('agents:checkConfigured', (_event, configPath: string) => {
+  const resolved = configPath.replace(/^~/, os.homedir())
+  return fs.existsSync(resolved)
 })
 
 ipcMain.handle('sftp:realpath', async (_event, id: string, remotePath: string) => {
