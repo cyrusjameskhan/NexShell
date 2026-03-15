@@ -544,7 +544,7 @@ function Overlay({ children, ui, onClose }: { children: React.ReactNode; ui: any
       }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div style={{
+      <div data-win98-exempt style={{
         width: '90%', maxWidth: 1100, height: '80vh', maxHeight: 700,
         background: ui.bg, border: `1px solid ${ui.border}`, borderRadius: 12,
         boxShadow: `0 24px 64px ${ui.shadow}`,

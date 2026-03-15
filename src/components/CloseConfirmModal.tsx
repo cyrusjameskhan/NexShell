@@ -36,6 +36,7 @@ export default function CloseConfirmModal() {
     >
       <div
         onClick={e => e.stopPropagation()}
+        data-win98-exempt
         style={{
           width: 380,
           background: ui.bgSecondary,

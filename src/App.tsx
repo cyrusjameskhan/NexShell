@@ -13,9 +13,10 @@ import SidePanel from './components/SidePanel'
 import CloseConfirmModal from './components/CloseConfirmModal'
 
 export default function App() {
-  const { tabs, theme, sidePanelOpen, sidePanelSection, focusMode } = useStore()
+  const { tabs, theme, settings, sidePanelOpen, sidePanelSection, focusMode } = useStore()
   const ui = theme.ui
   const chromeHidden = focusMode !== 'off'
+  const uiScale = settings.uiScale ?? 1
 
   useEffect(() => {
     initStore().then(() => {
@@ -120,10 +121,14 @@ export default function App() {
         undefined
       }
       style={{
-        width: '100%', height: '100vh', display: 'flex', flexDirection: 'column',
+        width: uiScale !== 1 ? `${100 / uiScale}%` : '100%',
+        height: uiScale !== 1 ? `${100 / uiScale}vh` : '100vh',
+        display: 'flex', flexDirection: 'column',
         background: ui.bg, color: ui.text, overflow: 'hidden',
         filter: postProcessFilter ?? 'none',
         transition: 'filter 0.4s ease',
+        transform: uiScale !== 1 ? `scale(${uiScale})` : undefined,
+        transformOrigin: 'top left',
       }}
     >
       {!chromeHidden && <TitleBar />}
@@ -183,6 +188,7 @@ function ThemeQuickPicker({ ui, activeTheme, onClose }: { ui: any; activeTheme: 
   return (
     <div
       ref={ref}
+      data-win98-exempt
       style={{
         position: 'absolute',
         bottom: 28,

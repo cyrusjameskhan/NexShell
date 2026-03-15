@@ -19,6 +19,7 @@ export interface TerminalTheme {
   id: string
   name: string
   category?: 'extra'
+  isLight?: boolean
   effects?: ThemeEffects
   colors: {
     background: string
@@ -107,6 +108,8 @@ export interface AppSettings {
   aiProvider: 'ollama' | 'lmstudio' | 'custom'
   aiEndpoint: string
   aiApiKey: string
+  /** API format for custom provider: auto-detect, force OpenAI, or force Ollama */
+  aiApiFormat: 'auto' | 'openai' | 'ollama'
   shell: string
   agentCommand: string
   /** Max number of session logs to keep. -1 = unlimited */
@@ -115,6 +118,8 @@ export interface AppSettings {
   opacity: number
   /** Keep the window above all others */
   alwaysOnTop: boolean
+  /** UI scale factor 0.75–1.5 (default 1.0) */
+  uiScale: number
 }
 
 export type SidePanelSection = 'hosts' | 'agents' | 'variables' | 'snippets' | 'logs' | 'libraries'
@@ -137,6 +142,8 @@ export interface LibraryTool {
   description: string
   /** command to check if installed, e.g. "git --version" */
   checkCmd: string
+  /** fallback commands to try if checkCmd fails (e.g. known install paths not in PATH) */
+  checkCmdFallbacks?: string[]
   /** platform-aware install commands */
   installCmds: { win?: string; mac?: string; linux?: string }
   homepage?: string
@@ -224,6 +231,13 @@ declare global {
       clearHistory: () => Promise<void>
       aiComplete: (prompt: string, context: string, model: string, nlMode?: boolean) => Promise<string | null>
       aiCheck: (endpoint?: string) => Promise<{ available: boolean; models: string[] }>
+      aiChatStream: (sessionId: string, messages: { role: string; content: string }[]) => Promise<void>
+      aiChatAbort: (sessionId: string) => Promise<void>
+      aiStartInteractiveChat: (sessionId: string) => Promise<void>
+      aiStopInteractiveChat: (sessionId: string) => Promise<void>
+      aiChatSendDirect: (sessionId: string, message: string) => Promise<void>
+      onLlmData: (sessionId: string, callback: (data: string) => void) => () => void
+      onLlmDone: (sessionId: string, callback: () => void) => () => void
       getTheme: () => Promise<TerminalTheme | null>
       setTheme: (theme: TerminalTheme) => Promise<void>
       getSettings: () => Promise<AppSettings | null>
@@ -257,7 +271,8 @@ declare global {
       localMkdir: (dirPath: string) => Promise<{ ok: true } | { error: string }>
       showOpenDialog: (options: { properties: string[]; defaultPath?: string; title?: string }) => Promise<string[] | null>
       showSaveDialog: (options: { defaultPath?: string; title?: string }) => Promise<string | null>
-      checkTool: (cmd: string) => Promise<{ installed: boolean; version: string | null }>
+      checkTool: (cmd: string | string[]) => Promise<{ installed: boolean; version: string | null }>
+      invalidateLibraryPathCache: () => Promise<void>
       installTool: (sessionId: string, cmd: string) => Promise<void>
       checkAgentConfigured: (configPath: string) => Promise<boolean>
       openExternal: (url: string) => Promise<void>

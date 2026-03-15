@@ -4,7 +4,7 @@ import {
   setActivePaneInWorkspace, closePane,
   fillEmptyPane, closeEmptyPane, dropTabIntoEmptySlot,
   ejectPaneToTab, dragSplitOntoPane, movePaneWithinWorkspace, movePaneAcrossWorkspaces,
-  renameSession, createTab,
+  renameSession, createTab, defaultShellName,
 } from '../store'
 import { SplitNode, Workspace } from '../types'
 import TerminalView from './Terminal'
@@ -458,7 +458,7 @@ function TabChips({ sessionTabs, ui }: {
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', maxWidth: 300 }}>
       {sessionTabs.map(({ tab, index }) => {
         if (tab.kind !== 'session') return null
-        const name = sessions.find(s => s.id === tab.sessionId)?.name ?? 'PowerShell'
+        const name = sessions.find(s => s.id === tab.sessionId)?.name ?? defaultShellName
         return (
           <div
             key={tab.sessionId}

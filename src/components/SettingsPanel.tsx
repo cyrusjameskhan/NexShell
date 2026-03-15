@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useStore } from '../hooks'
-import { setState, refreshAiStatus } from '../store'
+import { setState, refreshAiStatus, toggleSidePanel } from '../store'
 import { themes } from '../themes'
 import { AppSettings, TerminalTheme } from '../types'
 
@@ -10,6 +10,7 @@ export default function SettingsPanel() {
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings)
   const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'ai'>('general')
   const [themeSearch, setThemeSearch] = useState('')
+  const [scalePreview, setScalePreview] = useState<number | null>(null)
 
   useEffect(() => {
     setLocalSettings(settings)
@@ -50,6 +51,7 @@ export default function SettingsPanel() {
     >
       <div
         onClick={e => e.stopPropagation()}
+        data-win98-exempt
         style={{
           width: 520,
           maxHeight: '80vh',
@@ -220,6 +222,68 @@ export default function SettingsPanel() {
                   ui={ui}
                 />
               </SettingRow>
+
+              <SettingRow label="UI Scale" ui={ui}>
+                {(() => {
+                  const displayScale = scalePreview ?? (localSettings.uiScale ?? 1)
+                  const displayPct = Math.round(displayScale * 100)
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <input
+                        type="range"
+                        min={75}
+                        max={150}
+                        step={10}
+                        value={displayPct}
+                        onChange={e => setScalePreview(Number(e.target.value) / 100)}
+                        onMouseUp={() => {
+                          if (scalePreview != null) { save({ uiScale: scalePreview }); setScalePreview(null) }
+                        }}
+                        onPointerUp={() => {
+                          if (scalePreview != null) { save({ uiScale: scalePreview }); setScalePreview(null) }
+                        }}
+                        style={{
+                          width: 120,
+                          accentColor: ui.accent,
+                          cursor: 'pointer',
+                        }}
+                      />
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color: displayScale === 1 ? ui.textDim : ui.accent,
+                          fontWeight: 500,
+                          minWidth: 38,
+                          textAlign: 'right',
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                      >
+                        {displayPct}%
+                      </span>
+                      {(localSettings.uiScale ?? 1) !== 1 && (
+                        <button
+                          onClick={() => { save({ uiScale: 1 }); setScalePreview(null) }}
+                          title="Reset to 100%"
+                          style={{
+                            padding: '2px 6px',
+                            fontSize: 10,
+                            borderRadius: 4,
+                            border: `1px solid ${ui.border}`,
+                            background: 'transparent',
+                            color: ui.textMuted,
+                            cursor: 'pointer',
+                            transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = ui.accent; e.currentTarget.style.color = ui.accent }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = ui.border; e.currentTarget.style.color = ui.textMuted }}
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  )
+                })()}
+              </SettingRow>
             </div>
           )}
 
@@ -256,22 +320,10 @@ export default function SettingsPanel() {
 const PROVIDER_INFO = {
   ollama: {
     label: 'Ollama',
-    downloadUrl: 'https://ollama.com/download',
-    installCmds: {
-      win32:  'winget install Ollama.Ollama',
-      darwin: 'brew install ollama',
-      linux:  'curl -fsSL https://ollama.com/install.sh | sh',
-    },
     afterInstall: 'Then run: ollama pull codellama',
   },
   lmstudio: {
     label: 'LM Studio',
-    downloadUrl: 'https://lmstudio.ai/download',
-    installCmds: {
-      win32:  'winget install ElementLabs.LMStudio',
-      darwin: 'brew install --cask lm-studio',
-      linux:  null,
-    },
     afterInstall: 'Then load a model and start the local server.',
   },
 } as const
@@ -282,10 +334,6 @@ function ProviderInstallHint({ provider, ui, onRefresh }: {
   onRefresh: () => Promise<void>
 }) {
   const info = PROVIDER_INFO[provider]
-  const platform = navigator.platform.toLowerCase().includes('win') ? 'win32'
-    : navigator.platform.toLowerCase().includes('mac') ? 'darwin' : 'linux'
-  const installCmd = info.installCmds[platform as keyof typeof info.installCmds] ?? null
-  const [copied, setCopied] = useState(false)
   const [checking, setChecking] = useState(false)
   const [serverHint, setServerHint] = useState(false)
 
@@ -294,16 +342,12 @@ function ProviderInstallHint({ provider, ui, onRefresh }: {
     setServerHint(false)
     await onRefresh()
     setChecking(false)
-    // onRefresh updates the store; if the parent still shows this component
-    // it means the connection still failed, so surface the server hint.
     setServerHint(true)
   }
 
-  function copyCmd() {
-    if (!installCmd) return
-    navigator.clipboard.writeText(installCmd)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  function goToLibraries() {
+    setState({ settingsOpen: false, sidePanelOpen: true, sidePanelSection: 'libraries', libraryFilter: 'LLM' })
+    toggleSidePanel('libraries')
   }
 
   const serverStartNote: Record<string, string> = {
@@ -315,7 +359,7 @@ function ProviderInstallHint({ provider, ui, onRefresh }: {
     <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', gap: 6 }}>
         <button
-          onClick={() => window.api.openExternal(info.downloadUrl)}
+          onClick={goToLibraries}
           style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             padding: '6px 10px', fontSize: 12, fontWeight: 500, borderRadius: 6,
@@ -327,10 +371,10 @@ function ProviderInstallHint({ provider, ui, onRefresh }: {
           onMouseLeave={e => { e.currentTarget.style.background = `${ui.accent}15` }}
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-            <polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
           </svg>
-          Download {info.label}
+          Install {info.label} via Libraries
         </button>
         <button
           onClick={handleAlreadyInstalled}
@@ -367,39 +411,6 @@ function ProviderInstallHint({ provider, ui, onRefresh }: {
         </div>
       )}
 
-      {installCmd && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '6px 10px', borderRadius: 6,
-          background: ui.bg, border: `1px solid ${ui.border}`,
-        }}>
-          <code style={{ flex: 1, fontSize: 11, color: ui.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {installCmd}
-          </code>
-          <button
-            onClick={copyCmd}
-            title="Copy to clipboard"
-            style={{
-              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4,
-              padding: '2px 7px', fontSize: 11, borderRadius: 4,
-              border: `1px solid ${copied ? ui.success : ui.border}`,
-              background: copied ? `${ui.success}15` : 'transparent',
-              color: copied ? ui.success : ui.textDim, cursor: 'pointer', transition: 'background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s',
-            }}
-          >
-            {copied ? (
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            ) : (
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-            )}
-            {copied ? 'Copied' : 'Copy'}
-          </button>
-        </div>
-      )}
       <p style={{ fontSize: 11, color: ui.textDim, margin: 0 }}>{info.afterInstall}</p>
     </div>
   )
@@ -548,31 +559,68 @@ function AiTab({ localSettings, aiStatus, save, ui }: {
           style={{ ...inputStyle(ui), width: '100%', boxSizing: 'border-box', minWidth: 0 }}
           spellCheck={false}
         />
-        {isOllamaCompatible && (
+        {isOllamaCompatible ? (
           <p style={{ fontSize: 11, color: ui.textDim, marginTop: 5 }}>
             Uses the Ollama-compatible <code style={{ color: ui.accent }}>/api/chat</code> endpoint.
+          </p>
+        ) : (
+          <p style={{ fontSize: 11, color: ui.textDim, marginTop: 5 }}>
+            Base URL or full endpoint — e.g. <code style={{ color: ui.accent }}>https://api.groq.com/openai/v1</code>
           </p>
         )}
       </div>
 
       {provider === 'custom' && (
-        <div>
-          <label style={{ fontSize: 12, color: ui.textMuted, display: 'block', marginBottom: 6 }}>
-            API Key
-          </label>
-          <input
-            type="password"
-            value={localSettings.aiApiKey ?? ''}
-            onChange={e => save({ aiApiKey: e.target.value })}
-            placeholder="sk-..."
-            style={{ ...inputStyle(ui), width: '100%', boxSizing: 'border-box', minWidth: 0 }}
-            spellCheck={false}
-            autoComplete="off"
-          />
-          <p style={{ fontSize: 11, color: ui.textDim, marginTop: 5 }}>
-            Sent as <code style={{ color: ui.accent }}>Authorization: Bearer &lt;key&gt;</code>
-          </p>
-        </div>
+        <>
+          <div>
+            <label style={{ fontSize: 12, color: ui.textMuted, display: 'block', marginBottom: 6 }}>
+              API Key
+            </label>
+            <input
+              type="password"
+              value={localSettings.aiApiKey ?? ''}
+              onChange={e => save({ aiApiKey: e.target.value })}
+              placeholder="sk-..."
+              style={{ ...inputStyle(ui), width: '100%', boxSizing: 'border-box', minWidth: 0 }}
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <p style={{ fontSize: 11, color: ui.textDim, marginTop: 5 }}>
+              Sent as <code style={{ color: ui.accent }}>Authorization: Bearer &lt;key&gt;</code>
+            </p>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: ui.textMuted, display: 'block', marginBottom: 8 }}>API Format</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {([
+                { id: 'auto' as const, label: 'Auto-detect' },
+                { id: 'openai' as const, label: 'OpenAI' },
+                { id: 'ollama' as const, label: 'Ollama' },
+              ]).map(f => {
+                const active = (localSettings.aiApiFormat ?? 'auto') === f.id
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => { save({ aiApiFormat: f.id }); doRefresh(endpoint) }}
+                    style={{
+                      flex: 1, padding: '7px 10px', fontSize: 12, fontWeight: 500, borderRadius: 7,
+                      border: `1.5px solid ${active ? ui.accent : ui.border}`,
+                      background: active ? `${ui.accent}18` : ui.bgTertiary,
+                      color: active ? ui.accent : ui.textMuted,
+                      cursor: 'pointer', transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                )
+              })}
+            </div>
+            <p style={{ fontSize: 11, color: ui.textDim, marginTop: 5 }}>
+              <b>OpenAI</b> — Groq, OpenRouter, Together, any <code style={{ color: ui.accent }}>/v1/chat/completions</code> API.{' '}
+              <b>Ollama</b> — local Ollama-compatible servers. <b>Auto</b> — guesses from the URL.
+            </p>
+          </div>
+        </>
       )}
 
       <div style={{ height: 1, background: ui.border }} />

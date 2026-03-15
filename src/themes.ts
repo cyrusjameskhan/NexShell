@@ -897,6 +897,7 @@ export const themes: TerminalTheme[] = [
   {
     id: 'light',
     name: 'Light',
+    isLight: true,
     colors: {
       background: '#ffffff',
       foreground: '#383a42',
@@ -953,9 +954,10 @@ export const themes: TerminalTheme[] = [
     id: 'windows98',
     name: 'Windows 98',
     category: 'extra',
+    isLight: true,
     effects: {
       globalCss: `
-        /* ── Win98 font: W95FA (MS Sans Serif replica), no antialiasing ── */
+        /* ── Win98 font: applies globally (including modals/settings) ── */
         .win98 * {
           font-family: 'W95FA', 'Tahoma', 'MS Sans Serif', 'Microsoft Sans Serif', sans-serif !important;
           font-size: 11px !important;
@@ -982,8 +984,8 @@ export const themes: TerminalTheme[] = [
           font-size: 11px !important;
         }
 
-        /* Win98 raised bevel on ALL buttons */
-        .win98 button {
+        /* Win98 raised bevel on chrome buttons — skip anything inside [data-win98-exempt] */
+        .win98 button:where(:not([data-win98-exempt] *)) {
           border-radius: 0 !important;
           box-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #404040, inset 2px 2px 0 #dfdfdf !important;
           border: none !important;
@@ -993,13 +995,13 @@ export const themes: TerminalTheme[] = [
           font-size: 11px !important;
           -webkit-font-smoothing: none !important;
         }
-        .win98 button:active,
-        .win98 button.win98-btn-active {
+        .win98 button:where(:not([data-win98-exempt] *)):active,
+        .win98 button:where(:not([data-win98-exempt] *)).win98-btn-active {
           box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff, inset 2px 2px 0 #404040, inset -2px -2px 0 #dfdfdf !important;
           background: #b8b8b8 !important;
         }
-        /* Win98 select dropdown */
-        .win98 select {
+        /* Win98 select dropdown — skip modals/settings */
+        .win98 select:where(:not([data-win98-exempt] *)) {
           border-radius: 0 !important;
           box-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #404040, inset 2px 2px 0 #dfdfdf !important;
           border: none !important;
@@ -1014,7 +1016,7 @@ export const themes: TerminalTheme[] = [
         .win98-titlebar button:active {
           box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff, inset 2px 2px 0 #404040, inset -2px -2px 0 #dfdfdf !important;
         }
-        .win98 input {
+        .win98 input:where(:not([data-win98-exempt] *)) {
           box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #dfdfdf, inset 2px 2px 0 #404040, inset -2px -2px 0 #ffffff !important;
         }
 
@@ -1042,6 +1044,11 @@ export const themes: TerminalTheme[] = [
           height: 16px;
         }
         .win98 *::-webkit-scrollbar-corner { background: #c0c0c0; }
+
+        /* Hard pixel shadow on modals/popups — skip form controls (they keep their bevel) */
+        .win98 div[style*="box-shadow"], .win98 div[style*="boxShadow"] {
+          box-shadow: 2px 2px 0 #000000 !important;
+        }
       `,
     },
     colors: {
@@ -1090,7 +1097,7 @@ export const themes: TerminalTheme[] = [
       inputFocus: '#000080',
       scrollbar: '#c0c0c0',
       scrollbarHover: '#a0a0a0',
-      shadow: 'inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #404040, inset 2px 2px 0 #dfdfdf',
+      shadow: '#000000',
     },
   },
 
@@ -1111,14 +1118,21 @@ export const themes: TerminalTheme[] = [
       flickerIntensity: 0.04,
       postProcessFilter: 'sepia(1) saturate(5) hue-rotate(80deg) brightness(0.92)',
       globalCss: `
-        .dos-font * {
-          font-family: 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
+        .dos-font, .dos-font * {
+          font-family: 'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
+          font-size: 18px !important;
+          line-height: 1.3 !important;
           -webkit-font-smoothing: none !important;
           font-smooth: never !important;
           letter-spacing: 0 !important;
         }
+        .dos-font input, .dos-font button, .dos-font select, .dos-font textarea {
+          font-family: 'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
+          font-size: 18px !important;
+        }
         .dos-font svg, .dos-font svg * {
           font-family: inherit !important;
+          font-size: inherit !important;
         }
       `,
     },
@@ -1187,14 +1201,21 @@ export const themes: TerminalTheme[] = [
       flickerIntensity: 0.02,
       postProcessFilter: 'sepia(1) saturate(3.5) hue-rotate(0deg) brightness(0.9)',
       globalCss: `
-        .dos-font * {
-          font-family: 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
+        .dos-font, .dos-font * {
+          font-family: 'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
+          font-size: 18px !important;
+          line-height: 1.3 !important;
           -webkit-font-smoothing: none !important;
           font-smooth: never !important;
           letter-spacing: 0 !important;
         }
+        .dos-font input, .dos-font button, .dos-font select, .dos-font textarea {
+          font-family: 'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
+          font-size: 18px !important;
+        }
         .dos-font svg, .dos-font svg * {
           font-family: inherit !important;
+          font-size: inherit !important;
         }
       `,
     },
@@ -1265,7 +1286,7 @@ export const themes: TerminalTheme[] = [
       globalCss: `
         .c64 * {
           font-family: 'Commodore 64', 'Courier New', monospace !important;
-          font-size: 14px !important;
+          font-size: 11px !important;
           line-height: 1.6 !important;
           letter-spacing: 0.5px !important;
           border-radius: 0 !important;
@@ -1279,7 +1300,7 @@ export const themes: TerminalTheme[] = [
         .c64 [style*="font-weight: 700"],
         .c64 [style*="fontWeight: 600"],
         .c64 [style*="fontWeight: 700"] {
-          font-size: 14px !important;
+          font-size: 11px !important;
           font-weight: normal !important;
         }
 
@@ -1347,6 +1368,11 @@ export const themes: TerminalTheme[] = [
 
         /* Selection highlight */
         .c64 ::selection { background: #a5a5ff; color: #000033; }
+
+        /* Hard pixel shadow — no blur/spread */
+        .c64 div[style*="box-shadow"], .c64 div[style*="boxShadow"] {
+          box-shadow: 2px 2px 0 #000033 !important;
+        }
       `,
     },
     colors: {
@@ -1395,7 +1421,7 @@ export const themes: TerminalTheme[] = [
       inputFocus: '#ffffff',
       scrollbar: '#5544aa',
       scrollbarHover: '#a5a5ff',
-      shadow: 'rgba(0,0,51,0.8)',
+      shadow: '#000033',
     },
   },
 ]

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, nativeTheme, dialog, shell } from 'electron'
 import path from 'path'
 import os from 'os'
-import { execFile } from 'child_process'
+import { execFile, execSync } from 'child_process'
 
 // Enable GPU compositing optimizations for smoother rendering
 app.commandLine.appendSwitch('enable-gpu-rasterization')
@@ -163,6 +163,7 @@ ipcMain.handle('pty:create', (_event, sessionId: string, cols = 120, rows = 30, 
   })
 
   ptyProcess.onData((data: string) => {
+    if (interactiveChats.has(sessionId)) return
     mainWindow?.webContents.send(`pty:data:${sessionId}`, data)
     const session = sessions.get(sessionId)
     if (session) {
@@ -189,6 +190,10 @@ ipcMain.handle('pty:create', (_event, sessionId: string, cols = 120, rows = 30, 
 })
 
 ipcMain.on('pty:write', (_event, sessionId: string, data: string) => {
+  if (interactiveChats.has(sessionId)) {
+    ipcMain.emit('ai:chatInput', _event, sessionId, data)
+    return
+  }
   const session = sessions.get(sessionId)
   if (session) {
     session.process.write(data)
@@ -277,17 +282,80 @@ const CMD_EXT_MAP: Record<string, string[]> = {
   cat:     [], less: [], more: [], head: [], tail: [], vi: [], vim: [], nano: [], code: [],
 }
 
-function loadAiSettings(): { endpoint: string; apiKey: string } {
+type ApiFormat = 'ollama' | 'openai'
+
+function loadAiSettings(): { endpoint: string; apiKey: string; provider: string; model: string; format: ApiFormat } {
   try {
     if (fs.existsSync(settingsPath)) {
       const s = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))
-      return {
-        endpoint: (s?.aiEndpoint ?? 'http://localhost:11434').replace(/\/$/, ''),
-        apiKey: s?.aiApiKey ?? '',
-      }
+      const endpoint = (s?.aiEndpoint ?? 'http://localhost:11434').replace(/\/$/, '')
+      const provider = s?.aiProvider ?? 'ollama'
+      const model = s?.aiModel ?? 'codellama'
+      const explicitFormat = s?.aiApiFormat ?? 'auto'
+      const format = resolveApiFormat(endpoint, provider, explicitFormat)
+      return { endpoint, apiKey: s?.aiApiKey ?? '', provider, model, format }
     }
   } catch { /* ignore */ }
-  return { endpoint: 'http://localhost:11434', apiKey: '' }
+  return { endpoint: 'http://localhost:11434', apiKey: '', provider: 'ollama', model: 'codellama', format: 'ollama' }
+}
+
+function resolveApiFormat(endpoint: string, provider: string, explicit: 'auto' | 'openai' | 'ollama'): ApiFormat {
+  if (explicit === 'openai' || explicit === 'ollama') return explicit
+  return detectApiFormat(endpoint, provider)
+}
+
+function detectApiFormat(endpoint: string, provider: string): ApiFormat {
+  if (provider === 'ollama' || provider === 'lmstudio') return 'ollama'
+  if (/\/v1(\/|$)/.test(endpoint) || /\/chat\/completions/i.test(endpoint)) return 'openai'
+  return 'openai'
+}
+
+function buildChatUrl(endpoint: string, format: ApiFormat): string {
+  if (format === 'openai') {
+    if (/\/chat\/completions\s*$/i.test(endpoint)) return endpoint
+    return endpoint.replace(/\/+$/, '') + '/chat/completions'
+  }
+  return endpoint + '/api/chat'
+}
+
+function buildModelsUrl(endpoint: string, format: ApiFormat): string {
+  if (format === 'openai') {
+    const base = endpoint.replace(/\/chat\/completions\s*$/i, '').replace(/\/+$/, '')
+    return base + '/models'
+  }
+  return endpoint + '/api/tags'
+}
+
+function parseModelsResponse(data: any, format: ApiFormat): string[] {
+  if (format === 'openai') {
+    return data.data?.map((m: any) => m.id) || []
+  }
+  return data.models?.map((m: any) => m.name) || []
+}
+
+function parseChatResponse(data: any, format: ApiFormat): string {
+  if (format === 'openai') {
+    return data.choices?.[0]?.message?.content ?? ''
+  }
+  return data.message?.content ?? ''
+}
+
+function parseStreamChunk(parsed: any, format: ApiFormat): { content: string; done: boolean } {
+  if (format === 'openai') {
+    const delta = parsed.choices?.[0]?.delta?.content ?? ''
+    const done = parsed.choices?.[0]?.finish_reason === 'stop' || !!parsed.choices?.[0]?.finish_reason
+    return { content: delta, done }
+  }
+  return { content: parsed.message?.content ?? '', done: !!parsed.done }
+}
+
+function buildChatBody(model: string, messages: any[], stream: boolean, format: ApiFormat, extraOptions?: any): any {
+  if (format === 'openai') {
+    return { model, messages, stream, ...(extraOptions?.temperature != null ? { temperature: extraOptions.temperature } : {}), ...(extraOptions?.max_tokens != null ? { max_tokens: extraOptions.max_tokens } : {}) }
+  }
+  const body: any = { model, messages, stream }
+  if (extraOptions) body.options = extraOptions
+  return body
 }
 
 function loadAiEndpoint(): string {
@@ -438,22 +506,19 @@ ipcMain.handle('ai:complete', async (_event, prompt: string, context: string, mo
           { role: 'user', content: `Partial: ${prompt}` },
         ]
 
-    const { endpoint, apiKey } = loadAiSettings()
+    const { endpoint, apiKey, format } = loadAiSettings()
     const authHeaders: Record<string, string> = apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}
-    const response = await fetch(`${endpoint}/api/chat`, {
+    const chatUrl = buildChatUrl(endpoint, format)
+    const extraOpts = format === 'openai'
+      ? { temperature: nlMode ? 0.2 : 0.05, max_tokens: nlMode ? 80 : 40 }
+      : { temperature: nlMode ? 0.2 : 0.05, num_predict: nlMode ? 80 : 40, stop: ['\n', '\r'] }
+    const body = format === 'openai'
+      ? buildChatBody(resolvedModel, messages, false, format, extraOpts)
+      : { model: resolvedModel, stream: false, think: false, options: extraOpts, messages }
+    const response = await fetch(chatUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders },
-      body: JSON.stringify({
-        model: resolvedModel,
-        stream: false,
-        think: false,
-        options: {
-          temperature: nlMode ? 0.2 : 0.05,
-          num_predict: nlMode ? 80 : 40,
-          stop: ['\n', '\r'],
-        },
-        messages,
-      }),
+      body: JSON.stringify(body),
     })
 
     if (!response.ok) {
@@ -462,7 +527,7 @@ ipcMain.handle('ai:complete', async (_event, prompt: string, context: string, mo
     }
 
     const data = await response.json()
-    const raw = (data.message?.content ?? '').trim()
+    const raw = parseChatResponse(data, format).trim()
     const JUNK = /^(null|none|n\/a|undefined|sorry|i (can|don)|no completion)/i
 
     if (nlMode) {
@@ -492,18 +557,331 @@ ipcMain.handle('ai:complete', async (_event, prompt: string, context: string, mo
 
 ipcMain.handle('ai:check', async (_event, overrideEndpoint?: string) => {
   try {
-    const { endpoint: savedEndpoint, apiKey } = loadAiSettings()
-    const endpoint = (overrideEndpoint?.replace(/\/$/, '')) || savedEndpoint
-    const authHeaders: Record<string, string> = apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}
-    const response = await fetch(`${endpoint}/api/tags`, { headers: authHeaders })
-    if (!response.ok) return { available: false, models: [] }
-    const data = await response.json()
-    return {
-      available: true,
-      models: data.models?.map((m: any) => m.name) || [],
+    const settings = loadAiSettings()
+    const endpoint = (overrideEndpoint?.replace(/\/$/, '')) || settings.endpoint
+    let explicitFormat: 'auto' | 'openai' | 'ollama' = 'auto'
+    try {
+      if (fs.existsSync(settingsPath)) {
+        const s = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))
+        explicitFormat = s?.aiApiFormat ?? 'auto'
+      }
+    } catch { /* ignore */ }
+    const format = resolveApiFormat(endpoint, settings.provider, explicitFormat)
+    const authHeaders: Record<string, string> = settings.apiKey ? { 'Authorization': `Bearer ${settings.apiKey}` } : {}
+
+    // Try models listing first
+    const modelsUrl = buildModelsUrl(endpoint, format)
+    try {
+      const response = await fetch(modelsUrl, { headers: authHeaders })
+      if (response.ok) {
+        const data = await response.json()
+        const models = parseModelsResponse(data, format)
+        if (models.length > 0) return { available: true, models }
+      }
+    } catch { /* models endpoint failed, try ping */ }
+
+    // Fallback: send a minimal chat request to verify the endpoint is alive
+    const chatUrl = buildChatUrl(endpoint, format)
+    const pingBody = buildChatBody(
+      settings.model,
+      [{ role: 'user', content: 'hi' }],
+      false,
+      format,
+      format === 'openai' ? { max_tokens: 1 } : { num_predict: 1 },
+    )
+    const pingResp = await fetch(chatUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      body: JSON.stringify(pingBody),
+    })
+    if (pingResp.ok) {
+      return { available: true, models: [settings.model] }
     }
+    return { available: false, models: [] }
   } catch {
     return { available: false, models: [] }
+  }
+})
+
+// Active local-llm chat sessions: sessionId → AbortController
+const activeLlmChats = new Map<string, AbortController>()
+
+ipcMain.handle('ai:chatStream', async (_event, sessionId: string, messages: { role: string; content: string }[]) => {
+  try {
+    const { endpoint, apiKey, model, format } = loadAiSettings()
+    const authHeaders: Record<string, string> = apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}
+
+    const prev = activeLlmChats.get(sessionId)
+    if (prev) prev.abort()
+    const controller = new AbortController()
+    activeLlmChats.set(sessionId, controller)
+
+    const chatUrl = buildChatUrl(endpoint, format)
+    const body = buildChatBody(model, messages, true, format)
+    const response = await fetch(chatUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      const errText = await response.text()
+      mainWindow?.webContents.send(`llm:data:${sessionId}`, `\r\n\x1b[31mError: ${response.status} ${errText}\x1b[0m\r\n`)
+      mainWindow?.webContents.send(`llm:done:${sessionId}`)
+      activeLlmChats.delete(sessionId)
+      return
+    }
+
+    const reader = (response.body as any)?.getReader?.()
+    if (!reader) {
+      const data = await response.json()
+      const content = parseChatResponse(data, format)
+      mainWindow?.webContents.send(`llm:data:${sessionId}`, content)
+      mainWindow?.webContents.send(`llm:done:${sessionId}`)
+      activeLlmChats.delete(sessionId)
+      return
+    }
+
+    const decoder = new TextDecoder()
+    let buf = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed === 'data: [DONE]') continue
+        const jsonStr = trimmed.startsWith('data: ') ? trimmed.slice(6) : trimmed
+        try {
+          const parsed = JSON.parse(jsonStr)
+          const { content: chunk, done: isDone } = parseStreamChunk(parsed, format)
+          if (chunk) {
+            mainWindow?.webContents.send(`llm:data:${sessionId}`, chunk.replace(/\n/g, '\r\n'))
+          }
+          if (isDone) {
+            mainWindow?.webContents.send(`llm:done:${sessionId}`)
+            activeLlmChats.delete(sessionId)
+            return
+          }
+        } catch { /* partial JSON */ }
+      }
+    }
+    mainWindow?.webContents.send(`llm:done:${sessionId}`)
+    activeLlmChats.delete(sessionId)
+  } catch (e: any) {
+    if (e.name !== 'AbortError') {
+      mainWindow?.webContents.send(`llm:data:${sessionId}`, `\r\n\x1b[31mError: ${e.message}\x1b[0m\r\n`)
+    }
+    mainWindow?.webContents.send(`llm:done:${sessionId}`)
+    activeLlmChats.delete(sessionId)
+  }
+})
+
+ipcMain.handle('ai:chatAbort', async (_event, sessionId: string) => {
+  const controller = activeLlmChats.get(sessionId)
+  if (controller) {
+    controller.abort()
+    activeLlmChats.delete(sessionId)
+  }
+})
+
+// ── Interactive LLM chat (custom provider) ──────────────────────────────────
+
+interface InteractiveChat {
+  messages: { role: string; content: string }[]
+  inputBuf: string
+  streaming: boolean
+  abortController: AbortController | null
+}
+
+const interactiveChats = new Map<string, InteractiveChat>()
+
+function chatWrite(sessionId: string, text: string) {
+  mainWindow?.webContents.send(`pty:data:${sessionId}`, text)
+}
+
+function chatPrompt(sessionId: string) {
+  chatWrite(sessionId, '\x1b[36m❯ \x1b[0m')
+}
+
+async function chatSendMessage(sessionId: string) {
+  const chat = interactiveChats.get(sessionId)
+  if (!chat) return
+
+  const userText = chat.inputBuf.trim()
+  chat.inputBuf = ''
+
+  if (!userText) {
+    chatPrompt(sessionId)
+    return
+  }
+
+  if (userText === '/exit' || userText === '/quit') {
+    chatWrite(sessionId, '\r\n\x1b[2mChat ended.\x1b[0m\r\n')
+    interactiveChats.delete(sessionId)
+    const session = sessions.get(sessionId)
+    if (session) session.process.write('\r')
+    return
+  }
+
+  if (userText === '/clear') {
+    chat.messages = [chat.messages[0]]
+    chatWrite(sessionId, '\r\n\x1b[2mConversation cleared.\x1b[0m\r\n')
+    chatPrompt(sessionId)
+    return
+  }
+
+  if (userText === '/help') {
+    chatWrite(sessionId, '\r\n\x1b[2mCommands: /clear (reset conversation), /exit (quit chat), /help\x1b[0m\r\n')
+    chatPrompt(sessionId)
+    return
+  }
+
+  chat.messages.push({ role: 'user', content: userText })
+  chat.streaming = true
+  chatWrite(sessionId, '\r\n')
+
+  try {
+    const { endpoint, apiKey, model, format } = loadAiSettings()
+
+    const controller = new AbortController()
+    chat.abortController = controller
+
+    const authHeaders: Record<string, string> = apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}
+    const chatUrl = buildChatUrl(endpoint, format)
+    const body = buildChatBody(model, chat.messages, true, format)
+    const response = await fetch(chatUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      const errText = await response.text()
+      chatWrite(sessionId, `\x1b[31mError: ${response.status} ${errText}\x1b[0m\r\n`)
+      chat.streaming = false
+      chat.abortController = null
+      chatPrompt(sessionId)
+      return
+    }
+
+    let fullReply = ''
+    const reader = (response.body as any)?.getReader?.()
+    if (reader) {
+      const decoder = new TextDecoder()
+      let buf = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop() ?? ''
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed || trimmed === 'data: [DONE]') continue
+          const jsonStr = trimmed.startsWith('data: ') ? trimmed.slice(6) : trimmed
+          try {
+            const parsed = JSON.parse(jsonStr)
+            const { content: chunk, done: isDone } = parseStreamChunk(parsed, format)
+            if (chunk) {
+              fullReply += chunk
+              chatWrite(sessionId, chunk.replace(/\n/g, '\r\n'))
+            }
+            if (isDone) break
+          } catch { /* partial JSON */ }
+        }
+      }
+    } else {
+      const data = await response.json()
+      fullReply = parseChatResponse(data, format)
+      chatWrite(sessionId, fullReply.replace(/\n/g, '\r\n'))
+    }
+
+    if (fullReply) {
+      chat.messages.push({ role: 'assistant', content: fullReply })
+    }
+  } catch (e: any) {
+    if (e.name !== 'AbortError') {
+      chatWrite(sessionId, `\r\n\x1b[31mError: ${e.message}\x1b[0m`)
+    }
+  }
+
+  chat.streaming = false
+  chat.abortController = null
+  chatWrite(sessionId, '\r\n\r\n')
+  if (interactiveChats.has(sessionId)) {
+    chatPrompt(sessionId)
+  }
+}
+
+ipcMain.handle('ai:startInteractiveChat', async (_event, sessionId: string) => {
+  const { provider, model, endpoint, format } = loadAiSettings()
+
+  interactiveChats.set(sessionId, {
+    messages: [
+      { role: 'system', content: 'You are a friendly and knowledgeable AI assistant running inside NexShell, a modern terminal application. You are here to help the user with anything they need — coding questions, debugging, writing scripts, explaining concepts, brainstorming ideas, or general knowledge. Be concise but thorough. When sharing code, use markdown-style backtick blocks. If the user asks something outside of coding, help them anyway — you are a general-purpose assistant, not limited to code.' },
+    ],
+    inputBuf: '',
+    streaming: false,
+    abortController: null,
+  })
+
+  const displayEndpoint = endpoint.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+  chatWrite(sessionId, `\x1b[1;36mLocal LLM Chat\x1b[0m \x1b[2m(${displayEndpoint} · ${model} · ${format})\x1b[0m\r\n`)
+  chatWrite(sessionId, `\x1b[2mType your message and press Enter. Commands: /help /clear /exit\x1b[0m\r\n\r\n`)
+  chatPrompt(sessionId)
+})
+
+ipcMain.handle('ai:stopInteractiveChat', async (_event, sessionId: string) => {
+  const chat = interactiveChats.get(sessionId)
+  if (chat?.abortController) chat.abortController.abort()
+  interactiveChats.delete(sessionId)
+})
+
+ipcMain.handle('ai:chatSendDirect', async (_event, sessionId: string, message: string) => {
+  const chat = interactiveChats.get(sessionId)
+  if (!chat || chat.streaming) return
+  const truncated = message.length > 120
+    ? message.substring(0, 120).replace(/\n/g, ' ') + '...'
+    : message.replace(/\n/g, ' ')
+  chatWrite(sessionId, `\x1b[37m${truncated}\x1b[0m\r\n`)
+  chat.inputBuf = message
+  chatSendMessage(sessionId)
+})
+
+ipcMain.on('ai:chatInput', (_event, sessionId: string, data: string) => {
+  const chat = interactiveChats.get(sessionId)
+  if (!chat) return
+
+  if (chat.streaming) {
+    if (data === '\x03') {
+      chat.abortController?.abort()
+      chatWrite(sessionId, '\r\n\x1b[2m(interrupted)\x1b[0m\r\n')
+    }
+    return
+  }
+
+  for (const ch of data) {
+    if (ch === '\r' || ch === '\n') {
+      chatWrite(sessionId, '\r\n')
+      chatSendMessage(sessionId)
+    } else if (ch === '\x7f' || ch === '\b') {
+      if (chat.inputBuf.length > 0) {
+        chat.inputBuf = chat.inputBuf.slice(0, -1)
+        chatWrite(sessionId, '\b \b')
+      }
+    } else if (ch === '\x03') {
+      chat.inputBuf = ''
+      chatWrite(sessionId, '^C\r\n')
+      chatPrompt(sessionId)
+    } else if (ch >= ' ') {
+      chat.inputBuf += ch
+      chatWrite(sessionId, ch)
+    }
   }
 })
 
@@ -906,15 +1284,61 @@ ipcMain.handle('logs:clear', () => {
 })
 
 // ── Libraries: tool detection & install ──
-ipcMain.handle('libraries:checkTool', async (_event, checkCmd: string) => {
-  return new Promise<{ installed: boolean; version: string | null }>((resolve) => {
-    // Run through the user's shell so npm global bin dirs and other PATH
-    // additions from shell profiles are visible to the check.
-    const isWin = process.platform === 'win32'
-    const shell = isWin ? 'cmd' : 'sh'
-    const shellFlag = isWin ? '/c' : '-c'
 
-    execFile(shell, [shellFlag, checkCmd], { timeout: 8000, env: process.env }, (err, stdout, stderr) => {
+/** Cached fresh PATH for Windows. Cleared on each Libraries refresh so new
+ * installs are visible, but reused across all concurrent tool checks in the
+ * same refresh cycle to avoid spawning 26+ PowerShell processes in parallel. */
+let _cachedFreshPath: string | null = null
+
+/** On Windows, winget/installers update PATH in the registry but the Electron
+ * process inherits PATH from its parent. Fetch fresh Machine+User PATH once
+ * per refresh cycle so newly installed tools are visible without restarting. */
+function getFreshPathWindows(): string {
+  if (_cachedFreshPath !== null) return _cachedFreshPath
+  try {
+    const out = execSync(
+      'powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable(\'Path\', \'Machine\') + \';\' + [Environment]::GetEnvironmentVariable(\'Path\', \'User\')"',
+      { encoding: 'utf8', timeout: 5000 }
+    )
+    _cachedFreshPath = out.trim() || process.env.PATH || ''
+  } catch {
+    _cachedFreshPath = process.env.PATH || ''
+  }
+  return _cachedFreshPath
+}
+
+function invalidateFreshPath() {
+  _cachedFreshPath = null
+}
+
+/** Parse a check command into [executable, ...args].
+ * Handles bare commands ("git --version") and absolute exe paths
+ * (C:\Program Files\Wireshark\tshark.exe --version). */
+function parseCheckCmd(checkCmd: string): { exe: string; args: string[] } | null {
+  const trimmed = checkCmd.trim()
+  // Windows absolute path: match up to .exe (path may contain spaces)
+  const winMatch = trimmed.match(/^([A-Za-z]:\\.+?\.exe)\s*(.*)/i)
+  if (winMatch) {
+    const exe = winMatch[1]
+    const args = winMatch[2] ? winMatch[2].trim().split(/\s+/) : []
+    return { exe, args }
+  }
+  // Unix absolute path: no spaces expected
+  const unixMatch = trimmed.match(/^(\/\S+)\s*(.*)/i)
+  if (unixMatch) {
+    const exe = unixMatch[1]
+    const args = unixMatch[2] ? unixMatch[2].trim().split(/\s+/) : []
+    return { exe, args }
+  }
+  return null
+}
+
+async function runCheckCmd(
+  checkCmd: string,
+  env: NodeJS.ProcessEnv
+): Promise<{ installed: boolean; version: string | null }> {
+  return new Promise((resolve) => {
+    function onResult(err: Error | null, stdout: string, stderr: string) {
       if (err) {
         resolve({ installed: false, version: null })
       } else {
@@ -922,8 +1346,40 @@ ipcMain.handle('libraries:checkTool', async (_event, checkCmd: string) => {
         const m = raw.match(/\d+\.\d+[\.\d]*/)?.[0] ?? null
         resolve({ installed: true, version: m })
       }
-    })
+    }
+
+    // For absolute exe paths, call directly — avoids cmd.exe quoting issues
+    const parsed = parseCheckCmd(checkCmd)
+    if (parsed) {
+      execFile(parsed.exe, parsed.args, { timeout: 8000, env }, onResult)
+      return
+    }
+
+    // Otherwise route through the shell (handles PATH resolution, builtins, etc.)
+    const isWin = process.platform === 'win32'
+    const shell = isWin ? 'cmd' : 'sh'
+    const shellFlag = isWin ? '/c' : '-c'
+    execFile(shell, [shellFlag, checkCmd], { timeout: 8000, env }, onResult)
   })
+}
+
+ipcMain.handle('libraries:checkTool', async (_event, checkCmdOrCmds: string | string[]) => {
+  const cmds = Array.isArray(checkCmdOrCmds) ? checkCmdOrCmds : [checkCmdOrCmds]
+  const isWin = process.platform === 'win32'
+  // getFreshPathWindows is cached, so calling it here is cheap after the first call
+  const env = isWin ? { ...process.env, PATH: getFreshPathWindows() } : process.env
+
+  for (const cmd of cmds) {
+    const result = await runCheckCmd(cmd, env)
+    if (result.installed) return result
+  }
+  return { installed: false, version: null }
+})
+
+/** Call before a full library re-scan to bust the PATH cache so newly installed
+ * tools are visible. Not needed for individual per-tool checks. */
+ipcMain.handle('libraries:invalidatePathCache', () => {
+  invalidateFreshPath()
 })
 
 ipcMain.handle('libraries:installTool', async (_event, sessionId: string, cmd: string) => {

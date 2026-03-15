@@ -3,6 +3,8 @@ import { defaultTheme } from './themes'
 
 type Listener = () => void
 
+export const defaultShellName = navigator.platform.toLowerCase().includes('win') ? 'PowerShell' : 'Terminal'
+
 const defaultSettings: AppSettings = {
   fontSize: 14,
   fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace",
@@ -14,11 +16,13 @@ const defaultSettings: AppSettings = {
   aiProvider: 'ollama',
   aiEndpoint: 'http://localhost:11434',
   aiApiKey: '',
+  aiApiFormat: 'auto',
   shell: 'powershell.exe',
   agentCommand: 'claude',
   logRetention: 100,
   opacity: 1,
   alwaysOnTop: false,
+  uiScale: 1,
 }
 
 export interface SshConnectionInfo {
@@ -45,6 +49,8 @@ interface Store {
   fontZoomTick: number
   sshConnections: SshConnectionInfo[]
   focusMode: 'off' | 'zen' | 'fullscreen'
+  /** Temporary filter to pre-select a Libraries category when navigating from another panel */
+  libraryFilter: string | null
 }
 
 let state: Store = {
@@ -66,6 +72,7 @@ let state: Store = {
   fontZoomTick: 0,
   sshConnections: [],
   focusMode: 'off',
+  libraryFilter: null,
 }
 
 const listeners = new Set<Listener>()
@@ -84,7 +91,7 @@ function uid(prefix: string) { return `${prefix}-${Date.now()}-${++counter}` }
 
 function makeSession(): TerminalSession {
   const n = state.sessions.length + 1
-  return { id: uid('session'), name: `PowerShell ${n}`, isActive: true, createdAt: Date.now() }
+  return { id: uid('session'), name: `${defaultShellName} ${n}`, isActive: true, createdAt: Date.now() }
 }
 
 // ── SplitNode tree utilities ─────────────────────────────────────────────────
@@ -199,7 +206,7 @@ export function setActivePaneInWorkspace(workspaceId: string, sessionId: string)
 }
 
 export function getTabLabel(tab: Tab): string {
-  if (tab.kind === 'session') return state.sessions.find(s => s.id === tab.sessionId)?.name ?? 'PowerShell'
+  if (tab.kind === 'session') return state.sessions.find(s => s.id === tab.sessionId)?.name ?? defaultShellName
   return state.workspaces.find(w => w.id === tab.workspaceId)?.name ?? 'Workspace'
 }
 

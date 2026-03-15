@@ -3,10 +3,12 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import w95faUrl from './assets/W95FA.otf'
 import falloutyUrl from './assets/r_fallouty.ttf'
+import ibm3270Url from './assets/3270-Regular.woff'
 import dosVgaUrl from './assets/PerfectDOSVGA437.woff'
 import dosVgaWinUrl from './assets/PerfectDOSVGA437Win.woff'
 import c64Url from './assets/Commodore64.woff'
 import c64RoundedUrl from './assets/Commodore64Rounded.woff'
+import vt323Url from './assets/VT323-Regular.ttf'
 
 const globalStyle = document.createElement('style')
 globalStyle.textContent = `
@@ -21,6 +23,12 @@ globalStyle.textContent = `
   font-style: normal;
   font-weight: 400;
   src: url('${falloutyUrl}') format('truetype');
+}
+@font-face {
+  font-family: 'IBM 3270';
+  font-style: normal;
+  font-weight: 400;
+  src: url('${ibm3270Url}') format('woff');
 }
 @font-face {
   font-family: 'Perfect DOS VGA 437';
@@ -45,6 +53,12 @@ globalStyle.textContent = `
   font-style: normal;
   font-weight: 400;
   src: url('${c64RoundedUrl}') format('woff');
+}
+@font-face {
+  font-family: 'VT323';
+  font-style: normal;
+  font-weight: 400;
+  src: url('${vt323Url}') format('truetype');
 }
 
 @keyframes spin { to { transform: rotate(360deg) } }

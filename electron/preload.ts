@@ -40,6 +40,24 @@ contextBridge.exposeInMainWorld('api', {
   aiComplete: (prompt: string, context: string, model: string, nlMode?: boolean) =>
     ipcRenderer.invoke('ai:complete', prompt, context, model, nlMode),
   aiCheck: (endpoint?: string) => ipcRenderer.invoke('ai:check', endpoint),
+  aiChatStream: (sessionId: string, messages: { role: string; content: string }[]) =>
+    ipcRenderer.invoke('ai:chatStream', sessionId, messages),
+  aiChatAbort: (sessionId: string) => ipcRenderer.invoke('ai:chatAbort', sessionId),
+  aiStartInteractiveChat: (sessionId: string) => ipcRenderer.invoke('ai:startInteractiveChat', sessionId),
+  aiStopInteractiveChat: (sessionId: string) => ipcRenderer.invoke('ai:stopInteractiveChat', sessionId),
+  aiChatSendDirect: (sessionId: string, message: string) => ipcRenderer.invoke('ai:chatSendDirect', sessionId, message),
+  onLlmData: (sessionId: string, callback: (data: string) => void) => {
+    const channel = `llm:data:${sessionId}`
+    const handler = (_event: any, data: string) => callback(data)
+    ipcRenderer.on(channel, handler)
+    return () => ipcRenderer.removeListener(channel, handler)
+  },
+  onLlmDone: (sessionId: string, callback: () => void) => {
+    const channel = `llm:done:${sessionId}`
+    const handler = () => callback()
+    ipcRenderer.on(channel, handler)
+    return () => ipcRenderer.removeListener(channel, handler)
+  },
 
   // Theme
   getTheme: () => ipcRenderer.invoke('theme:get'),
@@ -90,7 +108,8 @@ contextBridge.exposeInMainWorld('api', {
   showSaveDialog: (options: any) => ipcRenderer.invoke('dialog:save', options),
 
   // Libraries
-  checkTool: (cmd: string) => ipcRenderer.invoke('libraries:checkTool', cmd),
+  checkTool: (cmd: string | string[]) => ipcRenderer.invoke('libraries:checkTool', cmd),
+  invalidateLibraryPathCache: () => ipcRenderer.invoke('libraries:invalidatePathCache'),
   installTool: (sessionId: string, cmd: string) => ipcRenderer.invoke('libraries:installTool', sessionId, cmd),
   checkAgentConfigured: (configPath: string) => ipcRenderer.invoke('agents:checkConfigured', configPath),
 

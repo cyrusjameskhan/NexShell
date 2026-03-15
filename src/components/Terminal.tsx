@@ -164,27 +164,61 @@ export default function TerminalView({ sessionId, isActive }: Props) {
     const agentCmd = settingsRef.current.agentCommand || 'claude'
     const shell = settingsRef.current.shell || 'powershell.exe'
     const context = agentSelectedText.trim()
-    const session = createTab()
     setAgentPromptOpen(false)
     setAgentQuestion('')
     setAgentSelectedText('')
+
+    if (agentCmd === 'local-llm') {
+      const provider = settingsRef.current.aiProvider || 'ollama'
+      const model = settingsRef.current.aiModel || 'codellama'
+      const prompt = context ? `${context}\n\n${question}` : question
+      const session = createTab()
+
+      const isPowerShell = /powershell|pwsh/i.test(shell)
+      const isCmd = /^cmd(\.exe)?$/i.test(shell)
+
+      if (provider === 'ollama' || provider === 'lmstudio') {
+        setTimeout(() => {
+          let cmd: string
+          if (provider === 'ollama') {
+            if (isPowerShell) {
+              const escaped = prompt.replace(/`/g, '``').replace(/"/g, '`"').replace(/\r\n/g, '`n').replace(/\n/g, '`n').replace(/\r/g, '`n')
+              cmd = `echo "${escaped}" | ollama run ${model}`
+            } else if (isCmd) {
+              cmd = `ollama run ${model}`
+            } else {
+              const escaped = prompt.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r\n/g, '\\n').replace(/\n/g, '\\n').replace(/\r/g, '\\n')
+              cmd = `echo $'${escaped}' | ollama run ${model}`
+            }
+          } else {
+            cmd = `lms chat --model ${model}`
+          }
+          window.api.writePty(session.id, cmd + '\r')
+        }, 600)
+      } else {
+        setTimeout(async () => {
+          await window.api.aiStartInteractiveChat(session.id)
+          await window.api.aiChatSendDirect(session.id, prompt)
+        }, 700)
+      }
+      return
+    }
+
+    const session = createTab()
 
     const isPowerShell = /powershell|pwsh/i.test(shell)
     const isCmd = /^cmd(\.exe)?$/i.test(shell)
 
     setTimeout(() => {
       if (isPowerShell) {
-        // PowerShell: use backtick-n for newlines inside double-quoted strings
         const escapePsStr = (s: string) =>
           s.replace(/`/g, '``').replace(/"/g, '`"').replace(/\r\n/g, '`n').replace(/\n/g, '`n').replace(/\r/g, '`n')
         const prompt = context ? `${context}\n\n${question}` : question
         const escaped = escapePsStr(prompt)
         window.api.writePty(session.id, `${agentCmd} -p "${escaped}"\r`)
       } else if (isCmd) {
-        // cmd.exe: no good way to embed newlines, fall back to interactive
         window.api.writePty(session.id, agentCmd + '\r')
       } else {
-        // bash/zsh/fish: use $'...' ANSI-C quoting for real newlines
         const escapeSh = (s: string) =>
           s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r\n/g, '\\n').replace(/\n/g, '\\n').replace(/\r/g, '\\n')
         const prompt = context ? `${context}\n\n${question}` : question
@@ -280,8 +314,10 @@ export default function TerminalView({ sessionId, isActive }: Props) {
 
     const term = new XTerm({
       theme: buildXtermTheme(theme),
-      fontSize: settings.fontSize,
-      fontFamily: theme.id === 'commodore64' ? "'Commodore 64', monospace" : (theme.id === 'fallout' || theme.id === 'amber-crt') ? "'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace" : settings.fontFamily,
+      fontSize: (theme.id === 'fallout' || theme.id === 'amber-crt') ? Math.max(settings.fontSize, 18) : settings.fontSize,
+      fontFamily: theme.id === 'commodore64' ? "'Commodore 64', monospace" : (theme.id === 'fallout' || theme.id === 'amber-crt') ? "'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace" : theme.id === 'windows98' ? "'W95FA', 'Fixedsys', 'Consolas', monospace" : settings.fontFamily,
+      letterSpacing: theme.id === 'windows98' ? -4 : 0,
+      lineHeight: theme.id === 'commodore64' ? 1.4 : 1,
       cursorStyle: settings.cursorStyle,
       cursorBlink: settings.cursorBlink,
       scrollback: settings.scrollback,
@@ -289,7 +325,6 @@ export default function TerminalView({ sessionId, isActive }: Props) {
       smoothScrollDuration: 0,
       overviewRulerWidth: 0,
       scrollOnUserInput: true,
-      // These improve rendering sharpness
       drawBoldTextInBrightColors: true,
       minimumContrastRatio: 1,
     })
@@ -364,14 +399,25 @@ export default function TerminalView({ sessionId, isActive }: Props) {
       scheduleFlush()
     })
 
-    // Intercept keys before xterm swallows them — returning false
-    // lets the event bubble to window (for App.tsx global handlers).
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true
       if (e.key === 'F11') return false
       if (e.key === 'Escape' && getState().focusMode !== 'off') {
         const s = getState()
         if (!s.historyOpen && !s.settingsOpen && !s.sftpOpen && !s.closeConfirmOpen) return false
+      }
+      // Ctrl+Shift+C → copy selected text to clipboard
+      if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+        const sel = term.getSelection()
+        if (sel) navigator.clipboard.writeText(sel).catch(() => {})
+        return false
+      }
+      // Ctrl+Shift+V → paste from clipboard into PTY
+      if (e.ctrlKey && e.shiftKey && e.key === 'V') {
+        navigator.clipboard.readText().then(text => {
+          if (text) window.api.writePty(sessionId, text)
+        }).catch(() => {})
+        return false
       }
       return true
     })
@@ -523,15 +569,18 @@ export default function TerminalView({ sessionId, isActive }: Props) {
   useEffect(() => {
     if (xtermRef.current) {
       xtermRef.current.options.theme = buildXtermTheme(theme)
-      xtermRef.current.options.fontFamily = theme.id === 'commodore64' ? "'Commodore 64', monospace" : (theme.id === 'fallout' || theme.id === 'amber-crt') ? "'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace" : settings.fontFamily
+      xtermRef.current.options.fontSize = (theme.id === 'fallout' || theme.id === 'amber-crt') ? Math.max(settings.fontSize, 18) : settings.fontSize
+      xtermRef.current.options.fontFamily = theme.id === 'commodore64' ? "'Commodore 64', monospace" : (theme.id === 'fallout' || theme.id === 'amber-crt') ? "'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace" : theme.id === 'windows98' ? "'W95FA', 'Fixedsys', 'Consolas', monospace" : settings.fontFamily
+      xtermRef.current.options.letterSpacing = theme.id === 'windows98' ? -4 : 0
+      xtermRef.current.options.lineHeight = theme.id === 'commodore64' ? 1.4 : 1
       setTimeout(() => fitAddonRef.current?.fit(), 10)
     }
   }, [theme])
 
   useEffect(() => {
     if (xtermRef.current) {
-      xtermRef.current.options.fontSize = settings.fontSize
-      xtermRef.current.options.fontFamily = theme.id === 'commodore64' ? "'Commodore 64', monospace" : (theme.id === 'fallout' || theme.id === 'amber-crt') ? "'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace" : settings.fontFamily
+      xtermRef.current.options.fontSize = (theme.id === 'fallout' || theme.id === 'amber-crt') ? Math.max(settings.fontSize, 18) : settings.fontSize
+      xtermRef.current.options.fontFamily = theme.id === 'commodore64' ? "'Commodore 64', monospace" : (theme.id === 'fallout' || theme.id === 'amber-crt') ? "'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace" : theme.id === 'windows98' ? "'W95FA', 'Fixedsys', 'Consolas', monospace" : settings.fontFamily
       xtermRef.current.options.cursorStyle = settings.cursorStyle
       xtermRef.current.options.cursorBlink = settings.cursorBlink
       setTimeout(() => fitAddonRef.current?.fit(), 10)
@@ -573,6 +622,8 @@ export default function TerminalView({ sessionId, isActive }: Props) {
 
   const fx = theme.effects
 
+  const isCrt = theme.id === 'fallout' || theme.id === 'amber-crt'
+
   return (
     <div
       style={{
@@ -590,7 +641,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
       <div
         ref={containerRef}
         className="terminal-container"
-        style={{ width: '100%', height: '100%', padding: '4px 0 0 8px', overflow: 'hidden' }}
+        style={{ width: '100%', height: isCrt ? 'calc(100% - 10px)' : '100%', padding: '4px 0 0 8px', overflow: 'hidden' }}
       />
 
       {/* CRT / VHS effects overlays */}
@@ -815,7 +866,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
                     xtermRef.current?.focus()
                   }
                 }}
-                placeholder={agentSelectedText ? `Ask ${settings.agentCommand || 'claude'} about this...` : `Ask ${settings.agentCommand || 'claude'} anything...`}
+                placeholder={agentSelectedText ? `Ask ${settings.agentCommand === 'local-llm' ? 'Local LLM' : settings.agentCommand || 'claude'} about this...` : `Ask ${settings.agentCommand === 'local-llm' ? 'Local LLM' : settings.agentCommand || 'claude'} anything...`}
                 style={{
                   flex: 1,
                   background: theme.ui.bgTertiary,

@@ -348,7 +348,7 @@ function ContextMenu({ x, y, tabIndex, tab, ui, onClose, onRename, onSplitRight,
   }
 
   return (
-    <div ref={ref} style={style} onClick={e => e.stopPropagation()}>
+    <div ref={ref} style={style} data-win98-exempt onClick={e => e.stopPropagation()}>
       <MenuSection label="Tab" ui={ui} />
       <MenuItem label="Rename" icon={<RenameIcon />} onClick={onRename} ui={ui} />
       <MenuDivider ui={ui} />

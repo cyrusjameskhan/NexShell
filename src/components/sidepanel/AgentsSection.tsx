@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useStore } from '../../hooks'
-import { createTab, setState, setActiveTab, getState } from '../../store'
+import { createTab, setState, setActiveTab, getState, refreshAiStatus } from '../../store'
 
 // ── Agent catalogue ────────────────────────────────────────────────────────────
 
@@ -18,9 +18,22 @@ interface AgentTool {
   configPath?: string
   homepage?: string
   docsUrl?: string
+  /** If true, this agent uses the built-in AI provider instead of a CLI tool */
+  isBuiltinLlm?: boolean
 }
 
 const AGENTS: AgentTool[] = [
+  // Built-in Local LLM
+  {
+    id: 'local-llm',
+    name: 'Local LLM',
+    command: 'local-llm',
+    category: 'Built-in',
+    description: 'Chat with your local AI — uses Ollama, LM Studio, or custom API configured in Settings → AI',
+    checkCmd: '',
+    installCmds: {},
+    isBuiltinLlm: true,
+  },
   // Anthropic
   {
     id: 'claude',
@@ -223,6 +236,21 @@ const CATEGORIES = Array.from(new Set(AGENTS.map(a => a.category)))
 // ── Agent icons ────────────────────────────────────────────────────────────────
 
 const AGENT_ICONS: Record<string, React.ReactNode> = {
+  'local-llm': (
+    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="48" height="48" rx="10" fill="#6366f1"/>
+      {/* Brain / neural network icon */}
+      <circle cx="24" cy="16" r="4" stroke="white" strokeWidth="2" fill="none"/>
+      <circle cx="15" cy="26" r="3" stroke="white" strokeWidth="2" fill="none"/>
+      <circle cx="33" cy="26" r="3" stroke="white" strokeWidth="2" fill="none"/>
+      <circle cx="24" cy="36" r="3" stroke="white" strokeWidth="2" fill="none"/>
+      <line x1="22" y1="19.5" x2="16.5" y2="23.5" stroke="white" strokeWidth="1.5"/>
+      <line x1="26" y1="19.5" x2="31.5" y2="23.5" stroke="white" strokeWidth="1.5"/>
+      <line x1="15" y1="29" x2="22" y2="34" stroke="white" strokeWidth="1.5"/>
+      <line x1="33" y1="29" x2="26" y2="34" stroke="white" strokeWidth="1.5"/>
+      <line x1="18" y1="26" x2="30" y2="26" stroke="white" strokeWidth="1.5" strokeDasharray="2 2"/>
+    </svg>
+  ),
   claude: (
     <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect width="48" height="48" rx="10" fill="#CC9B7A"/>
@@ -384,7 +412,7 @@ type DetectionStatus = 'idle' | 'checking' | 'installed' | 'missing'
 interface AgentState {
   status: DetectionStatus
   version: string | null
-  configured: boolean
+  configured?: boolean
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -415,6 +443,10 @@ export default function AgentsSection() {
 
     Promise.all(
       AGENTS.map(async agent => {
+        if (agent.isBuiltinLlm) {
+          const aiResult = await window.api.aiCheck()
+          return { id: agent.id, installed: aiResult.available, version: aiResult.models[0] ?? null, configured: aiResult.available }
+        }
         const [toolResult, configured] = await Promise.all([
           window.api.checkTool(agent.checkCmd),
           agent.configPath
@@ -440,6 +472,14 @@ export default function AgentsSection() {
 
   const recheckAgent = useCallback(async (agent: AgentTool) => {
     setAgentStates(prev => ({ ...prev, [agent.id]: { ...prev[agent.id], status: 'checking', version: null } }))
+    if (agent.isBuiltinLlm) {
+      const aiResult = await window.api.aiCheck()
+      setAgentStates(prev => ({
+        ...prev,
+        [agent.id]: { status: aiResult.available ? 'installed' : 'missing', version: aiResult.models[0] ?? null, configured: aiResult.available },
+      }))
+      return
+    }
     const [result, configured] = await Promise.all([
       window.api.checkTool(agent.checkCmd),
       agent.configPath
@@ -458,7 +498,35 @@ export default function AgentsSection() {
     window.api.setSettings(newSettings)
   }
 
+  function openAiSettings() {
+    setState({ settingsOpen: true })
+  }
+
+  function launchLocalLlm() {
+    const provider = settings.aiProvider || 'ollama'
+    const model = settings.aiModel || 'codellama'
+    const session = createTab()
+    setTimeout(async () => {
+      const { tabs } = getState()
+      const idx = tabs.findIndex(t => t.kind === 'session' && t.sessionId === session.id)
+      if (idx !== -1) setActiveTab(idx)
+      setState({ sidePanelOpen: false })
+
+      if (provider === 'ollama') {
+        await window.api.installTool(session.id, `ollama run ${model}`)
+      } else if (provider === 'lmstudio') {
+        await window.api.installTool(session.id, `lms chat --model ${model}`)
+      } else {
+        await window.api.aiStartInteractiveChat(session.id)
+      }
+    }, 700)
+  }
+
   function launchAgent(agent: AgentTool) {
+    if (agent.isBuiltinLlm) {
+      launchLocalLlm()
+      return
+    }
     const cmd = agent.launchCmd || agent.command
     const session = createTab()
     setTimeout(async () => {
@@ -471,6 +539,10 @@ export default function AgentsSection() {
   }
 
   function setupAgent(agent: AgentTool) {
+    if (agent.isBuiltinLlm) {
+      openAiSettings()
+      return
+    }
     if (!agent.setupCmd) return
     const session = createTab()
     setTimeout(async () => {
@@ -483,6 +555,10 @@ export default function AgentsSection() {
   }
 
   function installAgent(agent: AgentTool) {
+    if (agent.isBuiltinLlm) {
+      setState({ settingsOpen: true })
+      return
+    }
     const cmd = agent.installCmds[platform]
     if (!cmd) return
 
@@ -623,6 +699,11 @@ export default function AgentsSection() {
               for (const a of AGENTS) next[a.id] = { status: 'checking', version: null }
               setAgentStates(next)
               Promise.all(AGENTS.map(async agent => {
+                if (agent.isBuiltinLlm) {
+                  const aiResult = await window.api.aiCheck()
+                  setAgentStates(prev => ({ ...prev, [agent.id]: { status: aiResult.available ? 'installed' : 'missing', version: aiResult.models[0] ?? null, configured: aiResult.available } }))
+                  return
+                }
                 const result = await window.api.checkTool(agent.checkCmd)
                 setAgentStates(prev => ({ ...prev, [agent.id]: { status: result.installed ? 'installed' : 'missing', version: result.version } }))
               }))
@@ -738,12 +819,22 @@ function DefaultAgentBanner({ defaultCommand, agents, agentStates, ui }: {
             )}
             {defaultAgent && !isInstalled && defaultState?.status === 'missing' && (
               <span style={{ fontSize: 9, color: ui.warning, background: `${ui.warning}18`, padding: '1px 5px', borderRadius: 3, fontWeight: 500 }}>
-                not installed
+                {defaultAgent.isBuiltinLlm ? 'not connected' : 'not installed'}
               </span>
             )}
           </div>
           <div style={{ fontSize: 10, color: ui.textDim, marginTop: 1 }}>
-            <code style={{ fontFamily: 'monospace', fontSize: 10, color: ui.accent }}>{defaultCommand}</code>
+            {defaultAgent?.isBuiltinLlm ? (
+              <span style={{ fontSize: 10, color: ui.textDim }}>
+                {defaultState?.version ? (
+                  <><code style={{ fontFamily: 'monospace', fontSize: 10, color: ui.accent }}>{defaultState.version}</code> via Settings → AI</>
+                ) : (
+                  <>Configure in Settings → AI</>
+                )}
+              </span>
+            ) : (
+              <code style={{ fontFamily: 'monospace', fontSize: 10, color: ui.accent }}>{defaultCommand}</code>
+            )}
           </div>
         </div>
         {defaultAgent && defaultAgent.homepage && (
@@ -857,9 +948,14 @@ function AgentRow({ agent, state, platform, ui, isDefault, onInstall, onRecheck,
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: ui.text }}>{agent.name}</span>
-          {isInstalled && state.version && (
+          {isInstalled && state.version && !agent.isBuiltinLlm && (
             <span style={{ fontSize: 9, color: ui.success, background: `${ui.success}18`, padding: '1px 5px', borderRadius: 3, fontWeight: 500 }}>
               v{state.version}
+            </span>
+          )}
+          {isInstalled && agent.isBuiltinLlm && state.version && (
+            <span style={{ fontSize: 9, color: ui.accent, background: `${ui.accent}18`, padding: '1px 5px', borderRadius: 3, fontWeight: 500 }}>
+              {state.version}
             </span>
           )}
           {needsSetup && (
@@ -875,7 +971,22 @@ function AgentRow({ agent, state, platform, ui, isDefault, onInstall, onRecheck,
 
       {/* Actions */}
       <div style={{ display: 'flex', gap: 3, flexShrink: 0, opacity: hovered ? 1 : (state.status === 'missing' || needsSetup ? 0.6 : 0), transition: 'opacity 0.15s' }}>
-        {isInstalled ? (
+        {agent.isBuiltinLlm ? (
+          <>
+            {isInstalled ? (
+              <>
+                <SmallBtn label="Launch" accent ui={ui} onClick={onLaunch} title="Open a chat session with your local LLM" />
+                <SmallBtn label="Settings" ui={ui} onClick={onSetup} title="Open AI Settings" />
+                {!isDefault && (
+                  <SmallBtn label="Set Default" ui={ui} onClick={onSetDefault} title="Set as default agent" />
+                )}
+              </>
+            ) : (
+              <SmallBtn label="Configure" accent ui={ui} onClick={onInstall} title="Open AI Settings to configure your local LLM provider" />
+            )}
+            <SmallBtn label="↺" ui={ui} onClick={onRecheck} title="Re-check AI provider connection" />
+          </>
+        ) : isInstalled ? (
           <>
             {needsSetup ? (
               <>

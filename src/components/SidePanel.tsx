@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useStore } from '../hooks'
-import { setState } from '../store'
+import { setState, getState } from '../store'
 import { SidePanelSection } from '../types'
 import IconRail from './IconRail'
 import HostsSection from './sidepanel/HostsSection'
@@ -34,10 +34,12 @@ export default function SidePanel() {
   const { theme, sidePanelSection } = useStore()
   const ui = theme.ui
 
-  // Close on Escape
+  // Close on Escape (but not while a modal is open)
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
+        const s = getState()
+        if (s.settingsOpen || s.historyOpen || s.sftpOpen || s.closeConfirmOpen) return
         setState({ sidePanelOpen: false })
       }
     }
@@ -61,7 +63,7 @@ export default function SidePanel() {
       <IconRail />
 
       {/* Section content */}
-      <div style={{
+      <div data-win98-exempt style={{
         flex: 1,
         minWidth: 0,
         background: ui.bgSecondary,

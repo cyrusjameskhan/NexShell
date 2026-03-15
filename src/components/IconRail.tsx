@@ -70,8 +70,11 @@ const SECTIONS: { id: SidePanelSection; label: string; icon: React.ReactNode; c6
     label: 'Libraries',
     c64Icon: '♣',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <path d="m12.12 3.26 2.84 1.5-5 8.24-2.84-1.5ZM4.88 3.26l-2.84 1.5 5 8.24 2.84-1.5ZM1 9.97l2.84 1.5 2.84-1.5-2.84-1.5Zm14 0-2.84 1.5-2.84-1.5 2.84-1.5Zm-7 3.78 2.84-1.5V9.97L8 8.47l-2.84 1.5v2.28ZM8 1 5.16 2.5v2.28L8 6.28l2.84-1.5V2.5Z"/>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="2" width="9" height="9" rx="2" />
+        <rect x="13" y="2" width="9" height="9" rx="2" />
+        <rect x="2" y="13" width="9" height="9" rx="2" />
+        <rect x="13" y="13" width="9" height="9" rx="2" />
       </svg>
     ),
   },

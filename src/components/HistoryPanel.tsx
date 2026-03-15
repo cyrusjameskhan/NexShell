@@ -69,6 +69,7 @@ export default function HistoryPanel() {
     >
       <div
         onClick={e => e.stopPropagation()}
+        data-win98-exempt
         style={{
           width: 560,
           maxHeight: 460,
