@@ -700,7 +700,7 @@ function FileList({ side, entries, loading, error, selected, onSelect, onNavigat
   }
 
   return (
-    <div style={{ flex: 1, overflow: 'auto' }} onContextMenu={handleBgContext}>
+    <div style={{ flex: 1, overflow: 'auto', contain: 'content', willChange: 'scroll-position' }} onContextMenu={handleBgContext}>
       {/* Column headers */}
       <div style={{
         display: 'flex', alignItems: 'center', padding: '3px 8px', gap: 4,
@@ -951,7 +951,7 @@ function SmallBtn({ children, title, onClick, ui }: {
       style={{
         width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'transparent', border: 'none', color: ui.textMuted,
-        cursor: 'pointer', borderRadius: 4, flexShrink: 0, transition: 'all 0.12s',
+        cursor: 'pointer', borderRadius: 4, flexShrink: 0, transition: 'background 0.12s, color 0.12s',
       }}
       onMouseEnter={e => { e.currentTarget.style.background = ui.bgTertiary; e.currentTarget.style.color = ui.text }}
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = ui.textMuted }}

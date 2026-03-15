@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 import { useStore } from '../../hooks'
 import { getState, setState } from '../../store'
 import { Snippet } from '../../types'
@@ -114,7 +114,7 @@ export default function SnippetsSection() {
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
           <input
-            placeholder="Search snippets…"
+            placeholder="Search snippets..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{ width: '100%', padding: '4px 8px 4px 24px', fontSize: 12, background: ui.inputBg, border: `1px solid ${ui.inputBorder}`, borderRadius: 5, color: ui.text, outline: 'none' }}
@@ -213,7 +213,7 @@ function TagFilterBar({ tags, ui, onSelect }: { tags: string[]; ui: any; onSelec
           style={{
             padding: '2px 7px', fontSize: 10, borderRadius: 10,
             background: `${ui.accent}18`, border: `1px solid ${ui.accent}33`,
-            color: ui.accent, cursor: 'pointer', transition: 'all 0.1s',
+            color: ui.accent, cursor: 'pointer', transition: 'background 0.1s, color 0.1s, border-color 0.1s',
           }}
           onMouseEnter={e => { e.currentTarget.style.background = `${ui.accent}30` }}
           onMouseLeave={e => { e.currentTarget.style.background = `${ui.accent}18` }}
@@ -257,7 +257,7 @@ function SnippetRow({ snippet, ui, copied, onRun, onCopy, onEdit, onDuplicate, o
             background: hovered ? `${ui.accent}22` : 'transparent',
             border: `1px solid ${hovered ? ui.accent + '44' : 'transparent'}`,
             color: ui.accent, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.1s',
+            transition: 'background 0.1s, color 0.1s, border-color 0.1s',
           }}
           onMouseEnter={e => { e.currentTarget.style.background = `${ui.accent}40`; e.currentTarget.style.borderColor = `${ui.accent}88` }}
           onMouseLeave={e => { e.currentTarget.style.background = hovered ? `${ui.accent}22` : 'transparent'; e.currentTarget.style.borderColor = hovered ? `${ui.accent}44` : 'transparent' }}

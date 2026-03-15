@@ -111,7 +111,7 @@ export default function SettingsPanel() {
                 border: 'none',
                 borderBottom: activeTab === tab.id ? `2px solid ${ui.accent}` : '2px solid transparent',
                 cursor: 'pointer',
-                transition: 'all 0.15s',
+                transition: 'background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s',
               }}
             >
               {tab.label}
@@ -134,17 +134,35 @@ export default function SettingsPanel() {
               </SettingRow>
 
               <SettingRow label="Font Family" ui={ui}>
-                <select
-                  value={localSettings.fontFamily}
-                  onChange={e => save({ fontFamily: e.target.value })}
-                  style={inputStyle(ui)}
-                >
-                  <option value="'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace">Cascadia Code</option>
-                  <option value="'Fira Code', 'Cascadia Code', monospace">Fira Code</option>
-                  <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
-                  <option value="'Consolas', monospace">Consolas</option>
-                  <option value="monospace">System Monospace</option>
-                </select>
+                {['fallout', 'amber-crt', 'commodore64', 'windows98'].includes(theme.id) ? (
+                  <div style={{
+                    ...inputStyle(ui),
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    opacity: 0.5,
+                    cursor: 'not-allowed',
+                    userSelect: 'none',
+                  }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    <span style={{ fontSize: 11, color: ui.textMuted }}>Overridden by theme</span>
+                  </div>
+                ) : (
+                  <select
+                    value={localSettings.fontFamily}
+                    onChange={e => save({ fontFamily: e.target.value })}
+                    style={inputStyle(ui)}
+                  >
+                    <option value="'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace">Cascadia Code</option>
+                    <option value="'Fira Code', 'Cascadia Code', monospace">Fira Code</option>
+                    <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                    <option value="'Consolas', monospace">Consolas</option>
+                    <option value="monospace">System Monospace</option>
+                  </select>
+                )}
               </SettingRow>
 
               <SettingRow label="Cursor Style" ui={ui}>
@@ -292,7 +310,7 @@ function ProviderInstallHint({ provider, ui, onRefresh }: {
             padding: '6px 10px', fontSize: 12, fontWeight: 500, borderRadius: 6,
             border: `1px solid ${ui.accent}50`,
             background: `${ui.accent}15`,
-            color: ui.accent, cursor: 'pointer', transition: 'all 0.15s',
+            color: ui.accent, cursor: 'pointer', transition: 'background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s',
           }}
           onMouseEnter={e => { e.currentTarget.style.background = `${ui.accent}28` }}
           onMouseLeave={e => { e.currentTarget.style.background = `${ui.accent}15` }}
@@ -313,7 +331,7 @@ function ProviderInstallHint({ provider, ui, onRefresh }: {
             color: checking ? ui.textDim : ui.textMuted,
             opacity: checking ? 0.6 : 1,
             cursor: checking ? 'default' : 'pointer',
-            transition: 'all 0.15s',
+            transition: 'background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s',
           }}
           onMouseEnter={e => { if (!checking) { e.currentTarget.style.borderColor = ui.accent; e.currentTarget.style.color = ui.accent } }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = ui.border; e.currentTarget.style.color = checking ? ui.textDim : ui.textMuted }}
@@ -355,7 +373,7 @@ function ProviderInstallHint({ provider, ui, onRefresh }: {
               padding: '2px 7px', fontSize: 11, borderRadius: 4,
               border: `1px solid ${copied ? ui.success : ui.border}`,
               background: copied ? `${ui.success}15` : 'transparent',
-              color: copied ? ui.success : ui.textDim, cursor: 'pointer', transition: 'all 0.15s',
+              color: copied ? ui.success : ui.textDim, cursor: 'pointer', transition: 'background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s',
             }}
           >
             {copied ? (
@@ -450,7 +468,7 @@ function AiTab({ localSettings, aiStatus, save, ui }: {
               border: `1px solid ${ui.border}`,
               color: checking ? ui.textDim : ui.textMuted,
               opacity: checking ? 0.5 : 1,
-              transition: 'all 0.15s',
+              transition: 'background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s',
             }}
             onMouseEnter={e => { if (!checking) { e.currentTarget.style.borderColor = ui.accent; e.currentTarget.style.color = ui.accent } }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = ui.border; e.currentTarget.style.color = checking ? ui.textDim : ui.textMuted }}
@@ -498,7 +516,7 @@ function AiTab({ localSettings, aiStatus, save, ui }: {
                 background: provider === p.id ? `${ui.accent}18` : ui.bgTertiary,
                 color: provider === p.id ? ui.accent : ui.textMuted,
                 cursor: 'pointer',
-                transition: 'all 0.15s',
+                transition: 'background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s',
               }}
             >
               {p.label}
@@ -629,10 +647,16 @@ function AppearanceTab({ themes, activeTheme, selectTheme, themeSearch, setTheme
   onOpacityChange: (v: number) => void
   ui: any
 }) {
-  const filtered = useMemo(() => {
+  const { standard, extra } = useMemo(() => {
     const q = themeSearch.trim().toLowerCase()
-    return q ? themes.filter(t => t.name.toLowerCase().includes(q)) : themes
+    const all = q ? themes.filter(t => t.name.toLowerCase().includes(q)) : themes
+    return {
+      standard: all.filter(t => t.category !== 'extra'),
+      extra: all.filter(t => t.category === 'extra'),
+    }
   }, [themes, themeSearch])
+
+  const totalShown = standard.length + extra.length
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -655,7 +679,7 @@ function AppearanceTab({ themes, activeTheme, selectTheme, themeSearch, setTheme
       <div style={{ height: 1, background: ui.border, marginBottom: 4 }} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <label style={{ fontSize: 13, color: ui.textMuted, fontWeight: 500 }}>Theme</label>
-        <span style={{ fontSize: 11, color: ui.textDim }}>{filtered.length} / {themes.length}</span>
+        <span style={{ fontSize: 11, color: ui.textDim }}>{totalShown} / {themes.length}</span>
       </div>
       <input
         placeholder="Search themes..."
@@ -672,7 +696,7 @@ function AppearanceTab({ themes, activeTheme, selectTheme, themeSearch, setTheme
         gridTemplateColumns: 'repeat(3, 1fr)',
         gap: 8,
       }}>
-        {filtered.map(t => (
+        {standard.map(t => (
           <ThemeCard
             key={t.id}
             theme={t}
@@ -681,12 +705,43 @@ function AppearanceTab({ themes, activeTheme, selectTheme, themeSearch, setTheme
             ui={ui}
           />
         ))}
-        {filtered.length === 0 && (
-          <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '24px 0', fontSize: 12, color: ui.textDim }}>
-            No themes match "{themeSearch}"
-          </div>
-        )}
       </div>
+
+      {extra.length > 0 && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+            <div style={{ height: 1, flex: 1, background: ui.border }} />
+            <span style={{ fontSize: 11, fontWeight: 600, color: ui.textMuted, textTransform: 'uppercase', letterSpacing: 1 }}>
+              Extra Themes
+            </span>
+            <div style={{ height: 1, flex: 1, background: ui.border }} />
+          </div>
+          <div style={{ fontSize: 11, color: ui.textDim, textAlign: 'center', marginTop: -4 }}>
+            CRT effects, scanlines &amp; film grain
+          </div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: 8,
+          }}>
+            {extra.map(t => (
+              <ThemeCard
+                key={t.id}
+                theme={t}
+                isActive={activeTheme.id === t.id}
+                onClick={() => selectTheme(t)}
+                ui={ui}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {totalShown === 0 && (
+        <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 12, color: ui.textDim }}>
+          No themes match "{themeSearch}"
+        </div>
+      )}
     </div>
   )
 }
@@ -708,10 +763,30 @@ function ThemeCard({ theme: t, isActive, onClick, ui }: {
         cursor: 'pointer',
         textAlign: 'left',
         transition: 'border-color 0.15s',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      <div style={{ fontSize: 12, fontWeight: 600, color: t.colors.foreground, marginBottom: 8 }}>
-        {t.name}
+      {t.effects?.scanlines && (
+        <div style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          background: `repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,${(t.effects.scanlineOpacity ?? 0.1) * 0.7}) 1px, rgba(0,0,0,${(t.effects.scanlineOpacity ?? 0.1) * 0.7}) 2px)`,
+        }} />
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: t.colors.foreground }}>
+          {t.name}
+        </span>
+        {t.category === 'extra' && (
+          <span style={{
+            fontSize: 8, fontWeight: 700, color: t.colors.background,
+            background: t.colors.foreground, borderRadius: 3,
+            padding: '1px 4px', lineHeight: '12px', textTransform: 'uppercase',
+            letterSpacing: 0.5, opacity: 0.8,
+          }}>
+            FX
+          </span>
+        )}
       </div>
       <div style={{ display: 'flex', gap: 3 }}>
         {[t.colors.red, t.colors.green, t.colors.yellow, t.colors.blue, t.colors.magenta, t.colors.cyan].map((c, i) => (

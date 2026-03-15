@@ -4,9 +4,10 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { SearchAddon } from '@xterm/addon-search'
 import { CanvasAddon } from '@xterm/addon-canvas'
+import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { useStore } from '../hooks'
-import { zoomFontSize, resetFontSize, createTab, getState } from '../store'
+import { zoomFontSize, resetFontSize, createTab, getState, setState } from '../store'
 import { Snippet, TerminalTheme } from '../types'
 
 interface Props {
@@ -53,6 +54,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
   const aiPromptInputRef = useRef<HTMLInputElement>(null)
   const [zoomVisible, setZoomVisible] = useState(false)
   const zoomTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const rendererRef = useRef<CanvasAddon | WebglAddon | null>(null)
 
   // Context menu state
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; selectedText: string; clipboardText: string; snippets: Snippet[] } | null>(null)
@@ -226,7 +228,6 @@ export default function TerminalView({ sessionId, isActive }: Props) {
       container.querySelector('.xterm-viewport')
 
     const onPointerDown = (e: PointerEvent) => {
-      // Only middle-button or shift+left drag; plain left is selection
       if (e.button !== 1 && !(e.button === 0 && e.shiftKey)) return
       const viewport = getViewport()
       if (!viewport) return
@@ -236,17 +237,24 @@ export default function TerminalView({ sessionId, isActive }: Props) {
       container.style.cursor = 'grabbing'
     }
 
+    let dragRaf = 0
     const onPointerMove = (e: PointerEvent) => {
       if (!dragRef.current) return
-      const viewport = getViewport()
-      if (!viewport) return
-      const delta = dragRef.current.startY - e.clientY
-      viewport.scrollTop = dragRef.current.startScroll + delta
+      const clientY = e.clientY
+      if (dragRaf) return
+      dragRaf = requestAnimationFrame(() => {
+        dragRaf = 0
+        if (!dragRef.current) return
+        const viewport = getViewport()
+        if (!viewport) return
+        viewport.scrollTop = dragRef.current.startScroll + (dragRef.current.startY - clientY)
+      })
     }
 
     const onPointerUp = (e: PointerEvent) => {
       if (!dragRef.current) return
       dragRef.current = null
+      if (dragRaf) { cancelAnimationFrame(dragRaf); dragRaf = 0 }
       container.releasePointerCapture(e.pointerId)
       container.style.cursor = ''
     }
@@ -261,6 +269,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
       container.removeEventListener('pointermove', onPointerMove)
       container.removeEventListener('pointerup', onPointerUp)
       container.removeEventListener('pointercancel', onPointerUp)
+      if (dragRaf) cancelAnimationFrame(dragRaf)
     }
   }
 
@@ -272,13 +281,12 @@ export default function TerminalView({ sessionId, isActive }: Props) {
     const term = new XTerm({
       theme: buildXtermTheme(theme),
       fontSize: settings.fontSize,
-      fontFamily: settings.fontFamily,
+      fontFamily: theme.id === 'commodore64' ? "'Commodore 64', monospace" : (theme.id === 'fallout' || theme.id === 'amber-crt') ? "'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace" : settings.fontFamily,
       cursorStyle: settings.cursorStyle,
       cursorBlink: settings.cursorBlink,
       scrollback: settings.scrollback,
       allowProposedApi: true,
-      // Smooth scroll with a short duration — feels snappier than 100ms
-      smoothScrollDuration: 80,
+      smoothScrollDuration: 0,
       overviewRulerWidth: 0,
       scrollOnUserInput: true,
       // These improve rendering sharpness
@@ -296,16 +304,29 @@ export default function TerminalView({ sessionId, isActive }: Props) {
 
     term.open(containerRef.current)
 
-    // ── Canvas renderer ──
-    // Faster than the default DOM renderer, no WebGL black-screen risk.
-    // xterm v5's recommended accelerated renderer.
-    const canvasAddon = new CanvasAddon()
-    term.loadAddon(canvasAddon)
-
     xtermRef.current = term
     fitAddonRef.current = fitAddon
 
+    const attachRenderer = () => {
+      try { rendererRef.current?.dispose() } catch { /* already gone */ }
+      rendererRef.current = null
+      try {
+        const webgl = new WebglAddon(true)
+        webgl.onContextLoss(() => {
+          try { webgl.dispose() } catch { /* already gone */ }
+          rendererRef.current = new CanvasAddon()
+          term.loadAddon(rendererRef.current)
+        })
+        term.loadAddon(webgl)
+        rendererRef.current = webgl
+      } catch {
+        rendererRef.current = new CanvasAddon()
+        term.loadAddon(rendererRef.current)
+      }
+    }
+
     // One-shot ResizeObserver: wait for real layout before spawning PTY
+    // and before loading the GPU renderer (WebGL needs a sized canvas).
     let ptyStarted = false
     const startObserver = new ResizeObserver(() => {
       if (ptyStarted) return
@@ -314,6 +335,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
       ptyStarted = true
       startObserver.disconnect()
       fitAddon.fit()
+      attachRenderer()
       const sessionName = getState().sessions.find(s => s.id === sessionId)?.name ?? 'Shell Session'
       window.api.createPty(sessionId, term.cols, term.rows, sessionName)
     })
@@ -340,6 +362,18 @@ export default function TerminalView({ sessionId, isActive }: Props) {
     const removeExitListener = window.api.onPtyExit(sessionId, () => {
       writeBufferRef.current.push('\r\n\x1b[90m[Session ended]\x1b[0m\r\n')
       scheduleFlush()
+    })
+
+    // Intercept keys before xterm swallows them — returning false
+    // lets the event bubble to window (for App.tsx global handlers).
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== 'keydown') return true
+      if (e.key === 'F11') return false
+      if (e.key === 'Escape' && getState().focusMode !== 'off') {
+        const s = getState()
+        if (!s.historyOpen && !s.settingsOpen && !s.sftpOpen && !s.closeConfirmOpen) return false
+      }
+      return true
     })
 
     term.onData((data) => {
@@ -394,14 +428,36 @@ export default function TerminalView({ sessionId, isActive }: Props) {
       window.api.resizePty(sessionId, cols, rows)
     })
 
-    // Debounced resize — don't refit on every pixel change
-    let resizeTimeout: ReturnType<typeof setTimeout>
+    // VS Code-style split resize: row changes are cheap (no reflow) and
+    // applied immediately for snappy vertical resize.  Column changes
+    // trigger expensive text reflow so they are debounced at 100 ms.
+    let colDebounce: ReturnType<typeof setTimeout>
+    let lastFitCols = term.cols
+    let lastFitRows = term.rows
     const resizeObserver = new ResizeObserver(() => {
       if (!ptyStarted) return
-      clearTimeout(resizeTimeout)
-      resizeTimeout = setTimeout(() => {
-        try { fitAddon.fit() } catch { /* teardown */ }
-      }, 16)
+      let dims: { cols: number; rows: number } | undefined
+      try {
+        dims = fitAddon.proposeDimensions()
+      } catch { return }
+      if (!dims) return
+      const { cols, rows } = dims
+      if (cols === lastFitCols && rows === lastFitRows) return
+
+      if (rows !== lastFitRows) {
+        lastFitRows = rows
+        try { term.resize(lastFitCols, rows) } catch { /* teardown */ }
+      }
+
+      if (cols !== lastFitCols) {
+        clearTimeout(colDebounce)
+        colDebounce = setTimeout(() => {
+          lastFitCols = cols
+          try { fitAddon.fit() } catch { /* teardown */ }
+          lastFitCols = term.cols
+          lastFitRows = term.rows
+        }, 100)
+      }
     })
     resizeObserver.observe(containerRef.current)
 
@@ -446,7 +502,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
 
     return () => {
       cancelAnimationFrame(rafRef.current)
-      clearTimeout(resizeTimeout)
+      clearTimeout(colDebounce)
       clearTimeout(aiTimeoutRef.current)
       startObserver.disconnect()
       resizeObserver.disconnect()
@@ -456,7 +512,8 @@ export default function TerminalView({ sessionId, isActive }: Props) {
       containerRef.current?.removeEventListener('contextmenu', onContextMenu)
       containerRef.current?.removeEventListener('wheel', onWheel)
       window.removeEventListener('keydown', onKeyDown)
-      canvasAddon.dispose()
+      try { rendererRef.current?.dispose() } catch { /* already gone */ }
+      rendererRef.current = null
       term.dispose()
       initialized.current = false
     }
@@ -466,13 +523,15 @@ export default function TerminalView({ sessionId, isActive }: Props) {
   useEffect(() => {
     if (xtermRef.current) {
       xtermRef.current.options.theme = buildXtermTheme(theme)
+      xtermRef.current.options.fontFamily = theme.id === 'commodore64' ? "'Commodore 64', monospace" : (theme.id === 'fallout' || theme.id === 'amber-crt') ? "'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace" : settings.fontFamily
+      setTimeout(() => fitAddonRef.current?.fit(), 10)
     }
   }, [theme])
 
   useEffect(() => {
     if (xtermRef.current) {
       xtermRef.current.options.fontSize = settings.fontSize
-      xtermRef.current.options.fontFamily = settings.fontFamily
+      xtermRef.current.options.fontFamily = theme.id === 'commodore64' ? "'Commodore 64', monospace" : (theme.id === 'fallout' || theme.id === 'amber-crt') ? "'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace" : settings.fontFamily
       xtermRef.current.options.cursorStyle = settings.cursorStyle
       xtermRef.current.options.cursorBlink = settings.cursorBlink
       setTimeout(() => fitAddonRef.current?.fit(), 10)
@@ -489,11 +548,30 @@ export default function TerminalView({ sessionId, isActive }: Props) {
   }, [fontZoomTick])
 
   useEffect(() => {
-    if (isActive && xtermRef.current) {
-      xtermRef.current.focus()
-      setTimeout(() => fitAddonRef.current?.fit(), 10)
+    if (!isActive || !xtermRef.current) return
+    const term = xtermRef.current
+    term.focus()
+    fitAddonRef.current?.fit()
+    // Chromium can silently evict WebGL contexts when tabs are hidden.
+    // Re-attach renderer on every activation to guarantee rendering.
+    try { rendererRef.current?.dispose() } catch { /* already gone */ }
+    rendererRef.current = null
+    try {
+      const webgl = new WebglAddon(true)
+      webgl.onContextLoss(() => {
+        try { webgl.dispose() } catch { /* */ }
+        rendererRef.current = new CanvasAddon()
+        term.loadAddon(rendererRef.current)
+      })
+      term.loadAddon(webgl)
+      rendererRef.current = webgl
+    } catch {
+      rendererRef.current = new CanvasAddon()
+      term.loadAddon(rendererRef.current)
     }
   }, [isActive])
+
+  const fx = theme.effects
 
   return (
     <div
@@ -502,13 +580,65 @@ export default function TerminalView({ sessionId, isActive }: Props) {
         height: '100%',
         position: 'relative',
         background: theme.colors.background,
+        ...(fx?.flicker ? {
+          animation: (fx.flickerIntensity ?? 0) >= 0.06
+            ? `crt-flicker-strong ${Math.round(80 / (fx.flickerIntensity || 0.06))}ms steps(1) infinite`
+            : `crt-flicker ${Math.round(80 / (fx.flickerIntensity || 0.04))}ms ease-in-out infinite`,
+        } : {}),
       }}
     >
       <div
         ref={containerRef}
         className="terminal-container"
-        style={{ width: '100%', height: '100%', padding: '4px 0 0 8px' }}
+        style={{ width: '100%', height: '100%', padding: '4px 0 0 8px', overflow: 'hidden' }}
       />
+
+      {/* CRT / VHS effects overlays */}
+      {fx?.scanlines && (
+        <div
+          style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 10,
+            background: `repeating-linear-gradient(
+              0deg,
+              transparent,
+              transparent 1px,
+              rgba(0,0,0,${fx.scanlineOpacity ?? 0.1}) 1px,
+              rgba(0,0,0,${fx.scanlineOpacity ?? 0.1}) 2px
+            )`,
+          }}
+        />
+      )}
+      {fx?.filmGrain && (
+        <div
+          style={{
+            position: 'absolute', inset: '-10%', pointerEvents: 'none', zIndex: 11,
+            opacity: fx.filmGrainOpacity ?? 0.05,
+            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")`,
+            backgroundSize: '128px 128px',
+            animation: 'grain-shift 0.4s steps(6) infinite',
+          }}
+        />
+      )}
+      {fx?.vhsTearing && (
+        <div
+          style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 12,
+            background: `linear-gradient(0deg, transparent 30%, ${theme.colors.foreground}18 50%, transparent 70%)`,
+            animation: 'vhs-tear 8s infinite',
+            mixBlendMode: 'screen',
+          }}
+        />
+      )}
+      {fx?.crtGlow && (
+        <div
+          style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 9,
+            boxShadow: `inset 0 0 ${60 * (fx.crtGlowIntensity ?? 0.3)}px ${20 * (fx.crtGlowIntensity ?? 0.3)}px ${fx.crtGlowColor ?? theme.colors.foreground}15,
+                         inset 0 0 ${120 * (fx.crtGlowIntensity ?? 0.3)}px ${40 * (fx.crtGlowIntensity ?? 0.3)}px ${fx.crtGlowColor ?? theme.colors.foreground}08`,
+            borderRadius: 'inherit',
+          }}
+        />
+      )}
       {/* Inline autocomplete ghost pill */}
       {aiSuggestion && !aiPromptOpen && (
         <div
@@ -584,6 +714,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
           selectedText={ctxMenu.selectedText}
           clipboardText={ctxMenu.clipboardText}
           snippets={ctxMenu.snippets}
+          focusMode={getState().focusMode}
           onClose={() => setCtxMenu(null)}
           onCopy={() => {
             navigator.clipboard.writeText(ctxMenu.selectedText).catch(() => {})
@@ -598,6 +729,12 @@ export default function TerminalView({ sessionId, isActive }: Props) {
             setCtxMenu(null)
           }}
           onSendToAgent={() => openAgentPrompt(ctxMenu.selectedText)}
+          onExitFocus={() => {
+            const wasFullscreen = getState().focusMode === 'fullscreen'
+            setState({ focusMode: 'off' })
+            if (wasFullscreen) window.api.setFullScreen(false)
+            setCtxMenu(null)
+          }}
           ui={theme.ui}
         />
       )}
@@ -678,7 +815,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
                     xtermRef.current?.focus()
                   }
                 }}
-                placeholder={agentSelectedText ? `Ask ${settings.agentCommand || 'claude'} about this…` : `Ask ${settings.agentCommand || 'claude'} anything…`}
+                placeholder={agentSelectedText ? `Ask ${settings.agentCommand || 'claude'} about this...` : `Ask ${settings.agentCommand || 'claude'} anything...`}
                 style={{
                   flex: 1,
                   background: theme.ui.bgTertiary,
@@ -760,7 +897,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
                   if (e.key === 'Enter' && !aiPromptLoading) { e.preventDefault(); submitAiPrompt() }
                   if (e.key === 'Escape') { setAiPromptOpen(false); setAiPromptText(''); xtermRef.current?.focus() }
                 }}
-                placeholder="e.g. list all files modified today, kill process on port 3000…"
+                placeholder="e.g. list all files modified today, kill process on port 3000..."
                 disabled={aiPromptLoading}
                 style={{
                   flex: 1,
@@ -792,7 +929,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {aiPromptLoading ? '…' : 'Generate ↵'}
+                {aiPromptLoading ? '...' : 'Generate ↵'}
               </button>
             </div>
           </div>
@@ -803,20 +940,23 @@ export default function TerminalView({ sessionId, isActive }: Props) {
 }
 
 // ── Context menu ──────────────────────────────────────────────────────────────
-function ContextMenu({ x, y, selectedText, clipboardText, snippets, onClose, onCopy, onPaste, onPasteSnippet, onSendToAgent, ui }: {
+function ContextMenu({ x, y, selectedText, clipboardText, snippets, focusMode, onClose, onCopy, onPaste, onPasteSnippet, onSendToAgent, onExitFocus, ui }: {
   x: number
   y: number
   selectedText: string
   clipboardText: string
   snippets: Snippet[]
+  focusMode: 'off' | 'zen' | 'fullscreen'
   onClose: () => void
   onCopy: () => void
   onPaste: () => void
   onPasteSnippet: (cmd: string) => void
   onSendToAgent: () => void
+  onExitFocus: () => void
   ui: any
 }) {
   const [snippetsOpen, setSnippetsOpen] = useState(false)
+  const inFocus = focusMode !== 'off'
 
   useEffect(() => {
     const handler = () => onClose()
@@ -829,13 +969,15 @@ function ContextMenu({ x, y, selectedText, clipboardText, snippets, onClose, onC
   const hasSnippets = snippets.length > 0
   const hasAgent = true
 
-  const menuWidth = 180
-  // Estimate height to keep menu on screen
-  const itemCount = (hasCopy ? 1 : 0) + (hasPaste ? 1 : 0) + (hasSnippets ? 1 : 0) + 1
+  const menuWidth = 200
+  const itemCount = (hasCopy ? 1 : 0) + (hasPaste ? 1 : 0) + (hasSnippets ? 1 : 0) + 1 + (inFocus ? 1 : 0)
   const dividers = (hasCopy || hasPaste || hasSnippets) ? 1 : 0
   const menuHeight = itemCount * 32 + 8 + dividers * 9
   const cx = Math.min(x, window.innerWidth - menuWidth - 8)
   const cy = Math.min(y, window.innerHeight - menuHeight - 8)
+
+  const exitLabel = focusMode === 'fullscreen' ? 'Exit Fullscreen' : 'Exit Zen Mode'
+  const exitIcon: 'zen-exit' = 'zen-exit'
 
   return (
     <div
@@ -871,6 +1013,12 @@ function ContextMenu({ x, y, selectedText, clipboardText, snippets, onClose, onC
         <div style={{ height: 1, background: ui.border, margin: '4px 0' }} />
       )}
       {hasAgent && <CtxItem label="Ask Agent" icon="agent" onClick={onSendToAgent} ui={ui} accent />}
+      {inFocus && (
+        <>
+          <div style={{ height: 1, background: ui.border, margin: '4px 0' }} />
+          <CtxItem label={exitLabel} icon={exitIcon} onClick={onExitFocus} ui={ui} shortcut="Esc" />
+        </>
+      )}
     </div>
   )
 }
@@ -970,7 +1118,7 @@ function CtxItemSnippets({ ui, snippets, open, menuX, menuWidth, onToggle, onSel
                   // Enter on first result
                   if (e.key === 'Enter' && filtered.length > 0) onSelect(filtered[0].command)
                 }}
-                placeholder="Search snippets…"
+                placeholder="Search snippets..."
                 style={{
                   width: '100%',
                   padding: '4px 8px 4px 24px',
@@ -1040,12 +1188,13 @@ function SnippetSubItem({ snippet, ui, onSelect }: { snippet: Snippet; ui: any; 
   )
 }
 
-function CtxItem({ label, icon, onClick, ui, accent }: {
+function CtxItem({ label, icon, onClick, ui, accent, shortcut }: {
   label: string
-  icon: 'copy' | 'paste' | 'agent'
+  icon: 'copy' | 'paste' | 'agent' | 'zen-exit'
   onClick: () => void
   ui: any
   accent?: boolean
+  shortcut?: string
 }) {
   const [hovered, setHovered] = useState(false)
   return (
@@ -1078,12 +1227,17 @@ function CtxItem({ label, icon, onClick, ui, accent }: {
           <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
           <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
         </svg>
+      ) : icon === 'zen-exit' ? (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+        </svg>
       ) : (
         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none">
           <path d="M12 2 C12 2 13.5 8.5 22 12 C13.5 15.5 12 22 12 22 C12 22 10.5 15.5 2 12 C10.5 8.5 12 2 12 2Z" />
         </svg>
       )}
-      {label}
+      <span style={{ flex: 1 }}>{label}</span>
+      {shortcut && <span style={{ fontSize: 10, color: ui.textDim }}>{shortcut}</span>}
     </button>
   )
 }

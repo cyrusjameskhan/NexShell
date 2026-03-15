@@ -319,7 +319,7 @@ function SplitOverlay({ position, ui, isSameWorkspace }: { position: DropZonePos
         border: `2px solid ${ui.accent}`,
         borderRadius: 4,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'all 0.1s',
+        transition: 'background 0.1s, border-color 0.1s',
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, color: ui.accent }}>
           <span style={{ fontSize: 22, lineHeight: 1 }}>{arrowChar[position]}</span>
@@ -407,7 +407,7 @@ function DropZone({ workspaceId, ui, termBg }: {
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
           padding: '20px 32px', background: 'transparent',
           border: `1.5px dashed ${ui.border}`, borderRadius: 12,
-          cursor: 'pointer', color: ui.textMuted, transition: 'all 0.15s',
+          cursor: 'pointer', color: ui.textMuted, transition: 'background 0.15s, color 0.15s, border-color 0.15s',
         }}
         onMouseEnter={e => { e.currentTarget.style.borderColor = ui.accent; e.currentTarget.style.color = ui.accent; e.currentTarget.style.background = ui.accentMuted }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = ui.border; e.currentTarget.style.color = ui.textMuted; e.currentTarget.style.background = 'transparent' }}
@@ -598,10 +598,13 @@ function PaneHeader({ sessionId, workspaceId, isFocused, ui }: {
 
 function EmptyState({ ui, termBg, showNewSession }: { ui: any; termBg: string; showNewSession?: boolean }) {
   const [hovered, setHovered] = useState(false)
+  const isWin98 = ui.bg === '#c0c0c0'
+  const bg = isWin98 ? ui.bg : termBg
+
   return (
     <div style={{
       width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', gap: 16, background: termBg,
+      alignItems: 'center', justifyContent: 'center', gap: 16, background: bg,
     }}>
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={ui.textDim} strokeWidth="1.5">
         <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
@@ -610,9 +613,31 @@ function EmptyState({ ui, termBg, showNewSession }: { ui: any; termBg: string; s
       {showNewSession && (
         <button
           onClick={() => createTab()}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          style={{
+          onMouseEnter={e => {
+            if (isWin98) return
+            setHovered(true)
+          }}
+          onMouseLeave={e => {
+            if (isWin98) return
+            setHovered(false)
+          }}
+          style={isWin98 ? {
+            marginTop: 4,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '4px 16px',
+            fontSize: 11,
+            color: '#000000',
+            background: '#c0c0c0',
+            border: 'none',
+            borderRadius: 0,
+            cursor: 'pointer',
+            boxShadow: 'inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #404040, inset 2px 2px 0 #dfdfdf',
+            fontFamily: "'Tahoma', 'MS Sans Serif', sans-serif",
+            minWidth: 75,
+            justifyContent: 'center',
+          } : {
             marginTop: 4,
             display: 'inline-flex',
             alignItems: 'center',
@@ -624,12 +649,22 @@ function EmptyState({ ui, termBg, showNewSession }: { ui: any; termBg: string; s
             border: `1px solid ${ui.border}`,
             borderRadius: 6,
             cursor: 'pointer',
-            transition: 'all 0.15s ease',
+            transition: 'background 0.15s ease, color 0.15s ease, border-color 0.15s ease',
+          }}
+          onMouseDown={e => {
+            if (!isWin98) return
+            e.currentTarget.style.boxShadow = 'inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff, inset 2px 2px 0 #404040, inset -2px -2px 0 #dfdfdf'
+          }}
+          onMouseUp={e => {
+            if (!isWin98) return
+            e.currentTarget.style.boxShadow = 'inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #404040, inset 2px 2px 0 #dfdfdf'
           }}
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
+          {!isWin98 && (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          )}
           New Session
         </button>
       )}

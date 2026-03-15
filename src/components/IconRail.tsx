@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { useStore } from '../hooks'
 import { toggleSidePanel, setState } from '../store'
 import { SidePanelSection } from '../types'
-const SECTIONS: { id: SidePanelSection; label: string; icon: React.ReactNode }[] = [
+
+const SECTIONS: { id: SidePanelSection; label: string; icon: React.ReactNode; c64Icon: string }[] = [
   {
     id: 'hosts',
     label: 'SSH Hosts',
+    c64Icon: '♦',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
@@ -18,6 +20,7 @@ const SECTIONS: { id: SidePanelSection; label: string; icon: React.ReactNode }[]
   {
     id: 'agents',
     label: 'Agents',
+    c64Icon: '★',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none">
         <path d="M12 2 C12 2 13.5 8.5 22 12 C13.5 15.5 12 22 12 22 C12 22 10.5 15.5 2 12 C10.5 8.5 12 2 12 2Z" />
@@ -27,6 +30,7 @@ const SECTIONS: { id: SidePanelSection; label: string; icon: React.ReactNode }[]
   {
     id: 'variables',
     label: 'System Variables',
+    c64Icon: '▒',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
@@ -39,6 +43,7 @@ const SECTIONS: { id: SidePanelSection; label: string; icon: React.ReactNode }[]
   {
     id: 'snippets',
     label: 'Snippets',
+    c64Icon: '«»',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="16 18 22 12 16 6" />
@@ -49,6 +54,7 @@ const SECTIONS: { id: SidePanelSection; label: string; icon: React.ReactNode }[]
   {
     id: 'logs',
     label: 'Logs',
+    c64Icon: '▪▪▪',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -62,6 +68,7 @@ const SECTIONS: { id: SidePanelSection; label: string; icon: React.ReactNode }[]
   {
     id: 'libraries',
     label: 'Libraries',
+    c64Icon: '♣',
     icon: (
       <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
         <path d="m12.12 3.26 2.84 1.5-5 8.24-2.84-1.5ZM4.88 3.26l-2.84 1.5 5 8.24 2.84-1.5ZM1 9.97l2.84 1.5 2.84-1.5-2.84-1.5Zm14 0-2.84 1.5-2.84-1.5 2.84-1.5Zm-7 3.78 2.84-1.5V9.97L8 8.47l-2.84 1.5v2.28ZM8 1 5.16 2.5v2.28L8 6.28l2.84-1.5V2.5Z"/>
@@ -107,6 +114,7 @@ export default function IconRail() {
               activeBg={`${ui.accent}18`}
               onClick={() => toggleSidePanel(section.id)}
               ui={ui}
+              c64Icon={section.c64Icon}
             >
               {section.icon}
             </RailButton>
@@ -131,6 +139,7 @@ export default function IconRail() {
             isActive={false}
             color={ui.success}
             ui={ui}
+            c64Icon="●"
           >
             {/* Pulse dot inside the button area */}
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -162,6 +171,7 @@ export default function IconRail() {
           color={ui.textMuted}
           onClick={() => setState({ settingsOpen: true })}
           ui={ui}
+          c64Icon="✛"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3" />
@@ -173,7 +183,7 @@ export default function IconRail() {
   )
 }
 
-function RailButton({ children, tooltipKey, tooltipLabel, tooltip, setTooltip, isActive, color, activeBg, activeColor, onClick, ui }: {
+function RailButton({ children, tooltipKey, tooltipLabel, tooltip, setTooltip, isActive, color, activeBg, activeColor, onClick, ui, c64Icon }: {
   children: React.ReactNode
   tooltipKey: string
   tooltipLabel: string
@@ -185,14 +195,28 @@ function RailButton({ children, tooltipKey, tooltipLabel, tooltip, setTooltip, i
   activeColor?: string
   onClick?: () => void
   ui: any
+  c64Icon?: string
 }) {
+  const isWin98 = ui.bg === '#c0c0c0'
+  const isC64 = ui.bg === '#3b2b7e'
+  const isRetro = isWin98 || isC64
+
   return (
-    <div style={{ position: 'relative', width: '100%' }}>
+    <div style={{ position: 'relative', width: '100%', padding: isRetro ? '2px 4px' : 0, boxSizing: 'border-box' }}>
       <button
         onClick={onClick}
         onMouseEnter={() => setTooltip(tooltipKey)}
         onMouseLeave={() => setTooltip(null)}
-        style={{
+        className={isWin98 && isActive ? 'win98-btn-active' : isC64 && isActive ? 'c64-btn-active' : undefined}
+        style={isRetro ? {
+          width: '100%',
+          height: 36,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: onClick ? 'pointer' : 'default',
+          outline: 'none',
+        } : {
           width: '100%',
           height: 40,
           display: 'flex',
@@ -215,15 +239,16 @@ function RailButton({ children, tooltipKey, tooltipLabel, tooltip, setTooltip, i
             position: 'fixed',
             left: 50,
             pointerEvents: 'none',
-            background: ui.bgTertiary,
-            border: `1px solid ${ui.border}`,
-            color: ui.text,
-            fontSize: 12,
-            padding: '4px 8px',
-            borderRadius: 4,
+            background: isWin98 ? '#ffffe1' : ui.bgTertiary,
+            border: isWin98 ? '1px solid #000000' : `1px solid ${ui.border}`,
+            color: isWin98 ? '#000000' : ui.text,
+            fontSize: isWin98 ? 11 : 12,
+            padding: '2px 6px',
+            borderRadius: 0,
             whiteSpace: 'nowrap',
             zIndex: 9999,
-            boxShadow: `0 4px 12px ${ui.shadow}`,
+            boxShadow: isWin98 ? 'none' : `0 4px 12px ${ui.shadow}`,
+            fontFamily: isWin98 ? "'Tahoma', 'MS Sans Serif', sans-serif" : 'inherit',
           }}
         >
           {tooltipLabel}

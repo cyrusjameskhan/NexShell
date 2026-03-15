@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useStore } from '../../hooks'
 import { EnvVariable } from '../../types'
@@ -108,7 +108,7 @@ export default function VariablesSection() {
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
           <input
-            placeholder="Search variables…"
+            placeholder="Search variables..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{ width: '100%', padding: '4px 8px 4px 24px', fontSize: 12, background: ui.inputBg, border: `1px solid ${ui.inputBorder}`, borderRadius: 5, color: ui.text, outline: 'none' }}
@@ -119,7 +119,7 @@ export default function VariablesSection() {
         <button
           onClick={() => window.api.openSystemVariables()}
           title="Open system environment variables"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, background: 'transparent', border: `1px solid ${ui.border}`, borderRadius: 4, color: ui.textMuted, cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, background: 'transparent', border: `1px solid ${ui.border}`, borderRadius: 4, color: ui.textMuted, cursor: 'pointer', flexShrink: 0, transition: 'background 0.15s, color 0.15s, border-color 0.15s' }}
           onMouseEnter={e => { e.currentTarget.style.background = ui.bgTertiary; e.currentTarget.style.color = ui.text }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = ui.textMuted }}
         >
@@ -130,7 +130,7 @@ export default function VariablesSection() {
         <button
           onClick={() => setImportText('')}
           title="Import from .env format"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, background: 'transparent', border: `1px solid ${ui.border}`, borderRadius: 4, color: ui.textMuted, cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, background: 'transparent', border: `1px solid ${ui.border}`, borderRadius: 4, color: ui.textMuted, cursor: 'pointer', flexShrink: 0, transition: 'background 0.15s, color 0.15s, border-color 0.15s' }}
           onMouseEnter={e => { e.currentTarget.style.background = ui.bgTertiary; e.currentTarget.style.color = ui.text }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = ui.textMuted }}
         >

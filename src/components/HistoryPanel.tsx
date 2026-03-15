@@ -120,6 +120,8 @@ export default function HistoryPanel() {
             flex: 1,
             overflow: 'auto',
             padding: '8px 8px 12px',
+            contain: 'content',
+            willChange: 'scroll-position',
           }}
         >
           {results.length === 0 ? (

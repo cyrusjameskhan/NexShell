@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 import { useStore } from '../../hooks'
 import { createTab, setState, setActiveTab, getState, renameSession, registerSshConnection } from '../../store'
 import { SshHost, SshKey, SshHostOs } from '../../types'
@@ -201,11 +201,11 @@ export default function HostsSection() {
       displayName = `${baseName} (${next})`
     }
     renameSession(session.id, displayName)
-    setConnecting({ host, sessionId: session.id, phase: 'launching', message: 'Starting shell…' })
+    setConnecting({ host, sessionId: session.id, phase: 'launching', message: 'Starting shell...' })
 
     // Give PTY time to initialise, then send the SSH command
     setTimeout(() => {
-      setConnecting(prev => prev ? { ...prev, phase: 'connecting', message: `Connecting to ${host.host}…` } : null)
+      setConnecting(prev => prev ? { ...prev, phase: 'connecting', message: `Connecting to ${host.host}...` } : null)
 
       const cmd = buildSshCommand(host)
       window.api.writePty(session.id, cmd + '\r')
@@ -268,7 +268,7 @@ export default function HostsSection() {
         // Host fingerprint / known hosts prompt
         if (!fingerprintAnswered && (buffer.includes('yes/no') || buffer.includes('(yes/no') || buffer.includes('authenticity of host'))) {
           fingerprintAnswered = true
-          setConnecting(prev => prev ? { ...prev, phase: 'authenticating', message: 'Accepting host fingerprint…' } : null)
+          setConnecting(prev => prev ? { ...prev, phase: 'authenticating', message: 'Accepting host fingerprint...' } : null)
           window.api.writePty(session.id, 'yes\r')
           return
         }
@@ -276,7 +276,7 @@ export default function HostsSection() {
         // Password prompt
         if (!passwordSent && (buffer.includes('password:') || buffer.includes('password for '))) {
           passwordSent = true
-          setConnecting(prev => prev ? { ...prev, phase: 'authenticating', message: 'Authenticating…' } : null)
+          setConnecting(prev => prev ? { ...prev, phase: 'authenticating', message: 'Authenticating...' } : null)
           if (host.password) {
             window.api.writePty(session.id, host.password + '\r')
             // After sending password, give the server 8s to respond — any
@@ -387,26 +387,36 @@ export default function HostsSection() {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', borderBottom: `1px solid ${ui.border}`, flexShrink: 0, background: ui.bgTertiary }}>
-        {(['hosts', 'keys'] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTabState(tab)}
-            style={{
-              padding: '7px 14px',
-              fontSize: 11,
-              fontWeight: 500,
-              background: 'transparent',
-              border: 'none',
-              borderBottom: `2px solid ${activeTab === tab ? ui.accent : 'transparent'}`,
-              color: activeTab === tab ? ui.accent : ui.textMuted,
-              cursor: 'pointer',
-              transition: 'color 0.15s, border-color 0.15s',
-              textTransform: 'capitalize',
-            }}
-          >
-            {tab === 'hosts' ? 'Hosts' : 'Keys'}
-          </button>
-        ))}
+        {(['hosts', 'keys'] as const).map(tab => {
+          const isWin98 = ui.bg === '#c0c0c0'
+          const isC64 = ui.bg === '#3b2b7e'
+          const isActive = activeTab === tab
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTabState(tab)}
+              className={isWin98 && isActive ? 'win98-btn-active' : isC64 && isActive ? 'c64-btn-active' : undefined}
+              style={isWin98 ? {
+                padding: '4px 14px',
+                cursor: 'pointer',
+                textTransform: 'capitalize',
+              } : {
+                padding: '7px 14px',
+                fontSize: 11,
+                fontWeight: 500,
+                background: 'transparent',
+                border: 'none',
+                borderBottom: `2px solid ${isActive ? ui.accent : 'transparent'}`,
+                color: isActive ? ui.accent : ui.textMuted,
+                cursor: 'pointer',
+                transition: 'color 0.15s, border-color 0.15s',
+                textTransform: 'capitalize',
+              }}
+            >
+              {tab === 'hosts' ? 'Hosts' : 'Keys'}
+            </button>
+          )
+        })}
       </div>
 
       {/* Keys tab content */}
@@ -419,7 +429,7 @@ export default function HostsSection() {
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
               </svg>
               <input
-                placeholder="Search keys…"
+                placeholder="Search keys..."
                 value={keySearch}
                 onChange={e => setKeySearch(e.target.value)}
                 style={{ width: '100%', padding: '4px 8px 4px 24px', fontSize: 12, background: ui.inputBg, border: `1px solid ${ui.inputBorder}`, borderRadius: 5, color: ui.text, outline: 'none' }}
@@ -529,7 +539,7 @@ export default function HostsSection() {
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
             <input
-              placeholder="Search hosts…"
+              placeholder="Search hosts..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{ width: '100%', padding: '4px 8px 4px 24px', fontSize: 12, background: ui.inputBg, border: `1px solid ${ui.inputBorder}`, borderRadius: 5, color: ui.text, outline: 'none' }}
@@ -711,7 +721,7 @@ function ConnectOverlay({ state, ui, onDismiss, onGoToShell }: {
             </>
           ) : isConnected ? (
             <div style={{ fontSize: 11, color: ui.textDim, textAlign: 'center', width: '100%' }}>
-              Opening shell…
+              Opening shell...
             </div>
           ) : (
             <button onClick={onDismiss} style={btnStyle(ui, false)}>Cancel</button>
@@ -752,7 +762,7 @@ function btnStyle(ui: any, primary: boolean): React.CSSProperties {
   }
 }
 
-// ── More (…) dropdown for host actions ───────────────────────────────────────
+// ── More (...) dropdown for host actions ───────────────────────────────────────
 function MoreMenu({ ui, onEdit, onDelete }: { ui: any; onEdit: () => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -776,7 +786,7 @@ function MoreMenu({ ui, onEdit, onDelete }: { ui: any; onEdit: () => void; onDel
           background: open ? ui.bgTertiary : 'transparent',
           border: `1px solid ${open ? ui.border : 'transparent'}`,
           borderRadius: 4, color: ui.textMuted, cursor: 'pointer', padding: 0,
-          transition: 'all 0.1s',
+          transition: 'background 0.1s, color 0.1s, border-color 0.1s',
         }}
         onMouseEnter={e => { if (!open) { (e.currentTarget as HTMLButtonElement).style.background = ui.bgTertiary; (e.currentTarget as HTMLButtonElement).style.borderColor = ui.border } }}
         onMouseLeave={e => { if (!open) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent' } }}
@@ -1116,7 +1126,7 @@ function HostForm({ form, setForm, editing, ui, keys, onSave, onCancel }: {
       </FormRow>
       <FormRow label="Notes" ui={ui}>
         <textarea
-          placeholder="Optional notes…"
+          placeholder="Optional notes..."
           value={form.notes || ''}
           onChange={e => f('notes', e.target.value)}
           rows={2}
@@ -1202,7 +1212,7 @@ function IconActionBtn({ children, title, ui, onClick, accent, danger }: { child
 }
 function ViewBtn({ children, active, onClick, title, ui }: { children: React.ReactNode; active: boolean; onClick: () => void; title: string; ui: any }) {
   return (
-    <button onClick={onClick} title={title} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', background: active ? ui.accent : 'transparent', border: `1px solid ${active ? ui.accent : ui.border}`, borderRadius: 4, color: active ? ui.bg : ui.textMuted, cursor: 'pointer', transition: 'all 0.15s' }}>
+    <button onClick={onClick} title={title} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', background: active ? ui.accent : 'transparent', border: `1px solid ${active ? ui.accent : ui.border}`, borderRadius: 4, color: active ? ui.bg : ui.textMuted, cursor: 'pointer', transition: 'background 0.15s, color 0.15s, border-color 0.15s' }}>
       {children}
     </button>
   )
@@ -1438,7 +1448,7 @@ function GenerateKeyForm({ form, setForm, ui, genState, genError, onGenerate, on
                 onMouseEnter={e => canGenerate && ((e.currentTarget as HTMLButtonElement).style.opacity = '0.85')}
                 onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}>
                 {genState === 'generating' ? (
-                  <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 1s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</>
+                  <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 1s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating...</>
                 ) : 'Generate Key'}
               </button>
             </>
@@ -1496,7 +1506,7 @@ function KeyForm({ form, setForm, editing, ui, onSave, onCancel, onBrowse }: {
           </FormRow>
 
           <FormRow label="Comment" ui={ui}>
-            <FormInput placeholder="Optional note…" value={form.comment} onChange={v => f('comment', v)} ui={ui} />
+            <FormInput placeholder="Optional note..." value={form.comment} onChange={v => f('comment', v)} ui={ui} />
           </FormRow>
         </div>
 

@@ -14,24 +14,34 @@ export default function TitleBar() {
     }
   }
 
+  const isWin98 = theme.id === 'windows98'
+
   return (
     <div
+      className={isWin98 ? 'win98-titlebar' : undefined}
       style={{
-        height: 38,
-        background: ui.titlebar,
+        height: isWin98 ? 28 : 38,
+        background: isWin98 ? 'linear-gradient(to right, #000080, #1084d0)' : ui.titlebar,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingLeft: 16,
+        paddingLeft: isWin98 ? 4 : 16,
         paddingRight: 0,
-        borderBottom: `1px solid ${ui.border}`,
+        borderBottom: isWin98 ? '2px solid #000080' : `1px solid ${ui.border}`,
         WebkitAppRegion: 'drag',
         userSelect: 'none',
         flexShrink: 0,
+        boxShadow: isWin98 ? 'inset -1px -1px 0 #000040, inset 1px 1px 0 #4040c0' : undefined,
       } as any}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{
+      <div style={{ display: 'flex', alignItems: 'center', gap: isWin98 ? 4 : 8 }}>
+        {isWin98 && (
+          <div style={{
+            width: 16, height: 16, flexShrink: 0,
+            background: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 16 16\'%3E%3Crect x=\'1\' y=\'1\' width=\'6\' height=\'6\' fill=\'%23ff0000\'/%3E%3Crect x=\'9\' y=\'1\' width=\'6\' height=\'6\' fill=\'%2300ff00\'/%3E%3Crect x=\'1\' y=\'9\' width=\'6\' height=\'6\' fill=\'%230000ff\'/%3E%3Crect x=\'9\' y=\'9\' width=\'6\' height=\'6\' fill=\'%23ffff00\'/%3E%3C/svg%3E") center/contain no-repeat',
+          }} />
+        )}
+        {!isWin98 && <div style={{
           width: 18, height: 18, flexShrink: 0, opacity: 0.9,
           background: ui.text,
           maskImage: `url(${logo})`,
@@ -42,8 +52,8 @@ export default function TitleBar() {
           WebkitMaskSize: 'contain',
           WebkitMaskRepeat: 'no-repeat',
           WebkitMaskPosition: 'center',
-        }} />
-        <span style={{ fontSize: 13, fontWeight: 600, color: ui.text, letterSpacing: 0.5 }}>
+        }} />}
+        <span style={{ fontSize: isWin98 ? 12 : 13, fontWeight: isWin98 ? 700 : 600, color: isWin98 ? '#ffffff' : ui.text, letterSpacing: 0.5 }}>
           NexShell
         </span>
       </div>
@@ -51,27 +61,48 @@ export default function TitleBar() {
       <div
         style={{
           display: 'flex',
-          alignItems: 'stretch',
+          alignItems: 'center',
+          gap: isWin98 ? 2 : 0,
+          paddingRight: isWin98 ? 3 : 0,
           height: '100%',
           WebkitAppRegion: 'no-drag',
         } as any}
       >
-        <WindowButton onClick={() => window.api.minimize()} color={ui.textMuted} hoverBg={ui.bgTertiary}>
-          <svg width="12" height="12" viewBox="0 0 12 12">
-            <rect x="2" y="5.5" width="8" height="1" fill="currentColor" />
-          </svg>
-        </WindowButton>
-        <WindowButton onClick={() => window.api.maximize()} color={ui.textMuted} hoverBg={ui.bgTertiary}>
-          <svg width="12" height="12" viewBox="0 0 12 12">
-            <rect x="2" y="2" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1" />
-          </svg>
-        </WindowButton>
-        <WindowButton onClick={handleClose} color={ui.textMuted} hoverBg="#e81123" hoverColor="#fff">
-          <svg width="12" height="12" viewBox="0 0 12 12">
-            <line x1="2" y1="2" x2="10" y2="10" stroke="currentColor" strokeWidth="1.2" />
-            <line x1="10" y1="2" x2="2" y2="10" stroke="currentColor" strokeWidth="1.2" />
-          </svg>
-        </WindowButton>
+        {isWin98 ? (
+          <>
+            <Win98Button onClick={() => window.api.minimize()}>
+              <svg width="8" height="8" viewBox="0 0 8 8"><rect x="0" y="6" width="8" height="2" fill="#000"/></svg>
+            </Win98Button>
+            <Win98Button onClick={() => window.api.maximize()}>
+              <svg width="8" height="8" viewBox="0 0 8 8"><rect x="0" y="0" width="8" height="8" fill="none" stroke="#000" strokeWidth="1.5"/><rect x="0" y="0" width="8" height="2.5" fill="#000"/></svg>
+            </Win98Button>
+            <Win98Button onClick={handleClose} isClose>
+              <svg width="8" height="8" viewBox="0 0 8 8">
+                <line x1="1" y1="1" x2="7" y2="7" stroke="#000" strokeWidth="1.5"/>
+                <line x1="7" y1="1" x2="1" y2="7" stroke="#000" strokeWidth="1.5"/>
+              </svg>
+            </Win98Button>
+          </>
+        ) : (
+          <>
+            <WindowButton onClick={() => window.api.minimize()} color={ui.textMuted} hoverBg={ui.bgTertiary}>
+              <svg width="12" height="12" viewBox="0 0 12 12">
+                <rect x="2" y="5.5" width="8" height="1" fill="currentColor" />
+              </svg>
+            </WindowButton>
+            <WindowButton onClick={() => window.api.maximize()} color={ui.textMuted} hoverBg={ui.bgTertiary}>
+              <svg width="12" height="12" viewBox="0 0 12 12">
+                <rect x="2" y="2" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1" />
+              </svg>
+            </WindowButton>
+            <WindowButton onClick={handleClose} color={ui.textMuted} hoverBg="#e81123" hoverColor="#fff">
+              <svg width="12" height="12" viewBox="0 0 12 12">
+                <line x1="2" y1="2" x2="10" y2="10" stroke="currentColor" strokeWidth="1.2" />
+                <line x1="10" y1="2" x2="2" y2="10" stroke="currentColor" strokeWidth="1.2" />
+              </svg>
+            </WindowButton>
+          </>
+        )}
       </div>
     </div>
   )
@@ -112,6 +143,36 @@ function WindowButton({
       onMouseLeave={e => {
         e.currentTarget.style.background = 'transparent'
         e.currentTarget.style.color = color
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function Win98Button({ children, onClick, isClose }: { children: React.ReactNode; onClick: () => void; isClose?: boolean }) {
+  const w = isClose ? 18 : 16
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: w, height: 14,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#c0c0c0',
+        border: 'none',
+        cursor: 'pointer',
+        padding: 0,
+        flexShrink: 0,
+        boxShadow: 'inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #404040, inset 2px 2px 0 #dfdfdf',
+      }}
+      onMouseDown={e => {
+        e.currentTarget.style.boxShadow = 'inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff, inset 2px 2px 0 #404040, inset -2px -2px 0 #dfdfdf'
+      }}
+      onMouseUp={e => {
+        e.currentTarget.style.boxShadow = 'inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #404040, inset 2px 2px 0 #dfdfdf'
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.boxShadow = 'inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #404040, inset 2px 2px 0 #dfdfdf'
       }}
     >
       {children}

@@ -1,6 +1,25 @@
+export interface ThemeEffects {
+  scanlines?: boolean
+  scanlineOpacity?: number
+  filmGrain?: boolean
+  filmGrainOpacity?: number
+  vhsTearing?: boolean
+  crtGlow?: boolean
+  crtGlowColor?: string
+  crtGlowIntensity?: number
+  flicker?: boolean
+  flickerIntensity?: number
+  /** CSS filter applied to the entire app root to tint all UI elements */
+  postProcessFilter?: string
+  /** Extra CSS injected globally when this theme is active */
+  globalCss?: string
+}
+
 export interface TerminalTheme {
   id: string
   name: string
+  category?: 'extra'
+  effects?: ThemeEffects
   colors: {
     background: string
     foreground: string
@@ -190,6 +209,7 @@ declare global {
       maximize: () => void
       close: () => void
       isMaximized: () => Promise<boolean>
+      setFullScreen: (flag: boolean) => void
       createPty: (sessionId: string, cols: number, rows: number, sessionName?: string) => Promise<{ pid: number } | void>
       writePty: (sessionId: string, data: string) => void
       resizePty: (sessionId: string, cols: number, rows: number) => void

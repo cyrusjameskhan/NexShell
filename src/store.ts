@@ -5,7 +5,7 @@ type Listener = () => void
 
 const defaultSettings: AppSettings = {
   fontSize: 14,
-  fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace",
+  fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace",
   cursorStyle: 'bar',
   cursorBlink: true,
   scrollback: 5000,
@@ -43,6 +43,7 @@ interface Store {
   closeConfirmOpen: boolean
   fontZoomTick: number
   sshConnections: SshConnectionInfo[]
+  focusMode: 'off' | 'zen' | 'fullscreen'
 }
 
 let state: Store = {
@@ -63,6 +64,7 @@ let state: Store = {
   closeConfirmOpen: false,
   fontZoomTick: 0,
   sshConnections: [],
+  focusMode: 'off',
 }
 
 const listeners = new Set<Listener>()

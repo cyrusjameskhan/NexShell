@@ -3,9 +3,10 @@ import path from 'path'
 import os from 'os'
 import { execFile } from 'child_process'
 
-// Enable GPU rasterization for smoother rendering
+// Enable GPU compositing optimizations for smoother rendering
 app.commandLine.appendSwitch('enable-gpu-rasterization')
 app.commandLine.appendSwitch('enable-zero-copy')
+app.commandLine.appendSwitch('disable-frame-rate-limit')
 
 const isDev = !app.isPackaged
 
@@ -26,6 +27,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
+      backgroundThrottling: false,
     },
   })
 
@@ -76,6 +78,7 @@ ipcMain.on('window:maximize', () => {
 })
 ipcMain.on('window:close', () => mainWindow?.close())
 ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
+ipcMain.on('window:setFullScreen', (_event, flag: boolean) => mainWindow?.setFullScreen(flag))
 ipcMain.handle('window:setOpacity', (_event, opacity: number) => {
   if (mainWindow) mainWindow.setOpacity(Math.max(0.1, Math.min(1, opacity)))
 })

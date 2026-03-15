@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useStore } from './hooks'
-import { initStore, createTab, setState, toggleSidePanel } from './store'
+import { initStore, createTab, setState, getState, toggleSidePanel } from './store'
 import { themes } from './themes'
 import { TerminalTheme } from './types'
 import TitleBar from './components/TitleBar'
@@ -13,17 +13,42 @@ import SidePanel from './components/SidePanel'
 import CloseConfirmModal from './components/CloseConfirmModal'
 
 export default function App() {
-  const { tabs, theme, sidePanelOpen, sidePanelSection } = useStore()
+  const { tabs, theme, sidePanelOpen, sidePanelSection, focusMode } = useStore()
   const ui = theme.ui
+  const chromeHidden = focusMode !== 'off'
 
   useEffect(() => {
     initStore().then(() => {
-      createTab()
+      if (getState().tabs.length === 0) createTab()
     })
   }, [])
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // F11 toggles Fullscreen mode (chrome hidden + OS fullscreen)
+      if (e.key === 'F11') {
+        e.preventDefault()
+        const s = getState()
+        if (s.focusMode === 'fullscreen') {
+          setState({ focusMode: 'off' })
+          window.api.setFullScreen(false)
+        } else {
+          setState({ focusMode: 'fullscreen', sidePanelOpen: false })
+          window.api.setFullScreen(true)
+        }
+        return
+      }
+      // Escape exits either focus mode
+      if (e.key === 'Escape' && getState().focusMode !== 'off') {
+        const s = getState()
+        if (!s.historyOpen && !s.settingsOpen && !s.sftpOpen && !s.closeConfirmOpen) {
+          e.preventDefault()
+          const wasFullscreen = s.focusMode === 'fullscreen'
+          setState({ focusMode: 'off' })
+          if (wasFullscreen) window.api.setFullScreen(false)
+          return
+        }
+      }
       if (e.ctrlKey && e.key === 'r') {
         e.preventDefault()
         setState({ historyOpen: true })
@@ -66,30 +91,56 @@ export default function App() {
       *::-webkit-scrollbar-corner { background: transparent; }
       * { scrollbar-color: ${ui.scrollbar} transparent; scrollbar-width: thin; }
 
-      /* Pane header: always visible, no hover trick needed */
+      .xterm-viewport { contain: strict; will-change: scroll-position; }
+      [data-file-row] { content-visibility: auto; contain-intrinsic-size: auto 28px; }
     `
     return () => { style?.remove() }
   }, [ui.scrollbar, ui.scrollbarHover])
 
+  useEffect(() => {
+    const id = 'wrappedshell-theme-fx-styles'
+    let style = document.getElementById(id) as HTMLStyleElement | null
+    if (!style) {
+      style = document.createElement('style')
+      style.id = id
+      document.head.appendChild(style)
+    }
+    style.textContent = theme.effects?.globalCss ?? ''
+    return () => { style?.remove() }
+  }, [theme.effects?.globalCss])
+
+  const postProcessFilter = theme.effects?.postProcessFilter
+
   return (
-    <div style={{
-      width: '100%', height: '100vh', display: 'flex', flexDirection: 'column',
-      background: ui.bg, color: ui.text, overflow: 'hidden',
-    }}>
-      <TitleBar />
-      <TabBar />
+    <div
+      className={
+        theme.id === 'windows98' ? 'win98' :
+        theme.id === 'commodore64' ? 'c64' :
+        (theme.id === 'fallout' || theme.id === 'amber-crt') ? 'dos-font' :
+        undefined
+      }
+      style={{
+        width: '100%', height: '100vh', display: 'flex', flexDirection: 'column',
+        background: ui.bg, color: ui.text, overflow: 'hidden',
+        filter: postProcessFilter ?? 'none',
+        transition: 'filter 0.4s ease',
+      }}
+    >
+      {!chromeHidden && <TitleBar />}
+      {!chromeHidden && <TabBar />}
+      {focusMode === 'zen' && <ZenDragBar ui={ui} />}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'row', position: 'relative' }}>
         {/* PaneContainer always mounted so PTYs stay alive */}
         <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
           <PaneContainer />
         </div>
-        {sidePanelOpen && (
+        {sidePanelOpen && !chromeHidden && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', zIndex: 1 }}>
             <SidePanel />
           </div>
         )}
       </div>
-      <StatusBar ui={ui} theme={theme} />
+      {!chromeHidden && <StatusBar ui={ui} theme={theme} />}
       <HistoryPanel />
       <SftpPanel />
       <SettingsPanel />
@@ -152,7 +203,7 @@ function ThemeQuickPicker({ ui, activeTheme, onClose }: { ui: any; activeTheme: 
           autoFocus
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search themes…"
+          placeholder="Search themes..."
           style={{
             width: '100%',
             boxSizing: 'border-box',
@@ -222,6 +273,52 @@ function ThemeQuickPicker({ ui, activeTheme, onClose }: { ui: any; activeTheme: 
       >
         Open full settings →
       </div>
+    </div>
+  )
+}
+
+function ZenDragBar({ ui }: { ui: any }) {
+  const [hovered, setHovered] = useState(false)
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: hovered ? 38 : 38,
+        zIndex: 100,
+        WebkitAppRegion: 'drag',
+        cursor: 'grab',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: hovered ? `${ui.bg}e0` : 'transparent',
+        backdropFilter: hovered ? 'blur(8px)' : 'none',
+        transition: 'background 0.2s ease',
+      } as any}
+    >
+      {hovered && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          color: ui.textDim,
+          fontSize: 11,
+          userSelect: 'none',
+          pointerEvents: 'none',
+        }}>
+          <svg width="16" height="4" viewBox="0 0 16 4" fill="currentColor" style={{ opacity: 0.5 }}>
+            <rect x="0" y="0" width="16" height="1.5" rx="0.75" />
+            <rect x="0" y="2.5" width="16" height="1.5" rx="0.75" />
+          </svg>
+          <span style={{ opacity: 0.6 }}>Drag to move</span>
+          <span style={{ opacity: 0.4, fontSize: 10 }}>Esc to exit</span>
+        </div>
+      )}
     </div>
   )
 }

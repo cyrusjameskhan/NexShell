@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 import { useStore } from '../../hooks'
 import { createTab, setState, setActiveTab, getState } from '../../store'
 
@@ -536,7 +536,7 @@ export default function AgentsSection() {
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
           <input
-            placeholder="Search agents…"
+            placeholder="Search agents..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{ width: '100%', padding: '4px 8px 4px 24px', fontSize: 12, background: ui.inputBg, border: `1px solid ${ui.inputBorder}`, borderRadius: 5, color: ui.text, outline: 'none' }}
@@ -552,7 +552,7 @@ export default function AgentsSection() {
               <svg style={{ display: 'inline', verticalAlign: 'middle', marginRight: 3, animation: 'spin 1s linear infinite' }} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                 <circle cx="12" cy="12" r="9" strokeDasharray="30 20" strokeLinecap="round" />
               </svg>
-              Checking…
+              Checking...
             </span>
           ) : (
             <span style={{ fontSize: 10, color: ui.textDim }}>
@@ -903,7 +903,7 @@ function InstallOverlay({ state, ui, onDismiss, onGoToShell }: {
 
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: ui.text, marginBottom: 4 }}>
-            {isDone ? `${agent.name} installed!` : isFailed ? 'Install failed' : `Installing ${agent.name}…`}
+            {isDone ? `${agent.name} installed!` : isFailed ? 'Install failed' : `Installing ${agent.name}...`}
           </div>
           <div style={{ fontSize: 11, color: ui.textDim }}>
             {isDone ? 'Agent is ready to launch.' : isFailed ? 'Check the terminal for details.' : 'Running in a new terminal pane.'}
@@ -971,7 +971,7 @@ function CategoryPill({ label, active, onClick, ui }: { label: string; active: b
         borderRadius: 10,
         color: active ? ui.bg : ui.textMuted,
         cursor: 'pointer',
-        transition: 'all 0.15s',
+        transition: 'background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s',
       }}
       onMouseEnter={e => { if (!active) (e.currentTarget.style.borderColor = ui.accent) }}
       onMouseLeave={e => { if (!active) (e.currentTarget.style.borderColor = ui.border) }}

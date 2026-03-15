@@ -4,6 +4,7 @@ import {
   createTab, closeTab, setActiveTab, splitTab,
   mergeTabIntoWorkspace, ejectPaneToTab, setState, getTabLabel,
   renameSession, renameWorkspace, toggleSidePanel, getActiveSessionSshConnection,
+  getState,
 } from '../store'
 import { Tab } from '../types'
 
@@ -203,6 +204,17 @@ export default function TabBar() {
             setContextMenu(null)
           }}
           onCloseTab={() => { closeTab(contextMenu.tabIndex); setContextMenu(null) }}
+          onZenMode={() => {
+            setActiveTab(contextMenu.tabIndex)
+            setState({ focusMode: 'zen', sidePanelOpen: false })
+            setContextMenu(null)
+          }}
+          onFullscreen={() => {
+            setActiveTab(contextMenu.tabIndex)
+            setState({ focusMode: 'fullscreen', sidePanelOpen: false })
+            window.api.setFullScreen(true)
+            setContextMenu(null)
+          }}
         />
       )}
     </div>
@@ -303,10 +315,10 @@ function TabItem({
         style={{
           width: 16, height: 16, display: 'flex', alignItems: 'center',
           justifyContent: 'center', background: 'transparent', border: 'none',
-          color: ui.textDim, cursor: 'pointer', borderRadius: 3, flexShrink: 0, padding: 0,
+          color: ui.textMuted, cursor: 'pointer', borderRadius: 3, flexShrink: 0, padding: 0,
         }}
         onMouseEnter={e => { e.currentTarget.style.background = ui.danger + '30'; e.currentTarget.style.color = ui.danger }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = ui.textDim }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = ui.textMuted }}
       >
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
           <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
@@ -317,9 +329,9 @@ function TabItem({
 }
 
 // ── Context menu ─────────────────────────────────────────────────────────────
-function ContextMenu({ x, y, tabIndex, tab, ui, onClose, onRename, onSplitRight, onSplitDown, onCloseTab }: {
+function ContextMenu({ x, y, tabIndex, tab, ui, onClose, onRename, onSplitRight, onSplitDown, onCloseTab, onZenMode, onFullscreen }: {
   x: number; y: number; tabIndex: number; tab: Tab; ui: any
-  onClose: () => void; onRename: () => void; onSplitRight: () => void; onSplitDown: () => void; onCloseTab: () => void
+  onClose: () => void; onRename: () => void; onSplitRight: () => void; onSplitDown: () => void; onCloseTab: () => void; onZenMode: () => void; onFullscreen: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -339,6 +351,10 @@ function ContextMenu({ x, y, tabIndex, tab, ui, onClose, onRename, onSplitRight,
     <div ref={ref} style={style} onClick={e => e.stopPropagation()}>
       <MenuSection label="Tab" ui={ui} />
       <MenuItem label="Rename" icon={<RenameIcon />} onClick={onRename} ui={ui} />
+      <MenuDivider ui={ui} />
+      <MenuSection label="Focus" ui={ui} />
+      <MenuItem label="Zen Mode" icon={<ZenIcon />} onClick={onZenMode} ui={ui} />
+      <MenuItem label="Fullscreen" icon={<FullscreenIcon />} onClick={onFullscreen} ui={ui} shortcut="F11" />
       <MenuDivider ui={ui} />
       <MenuSection label="Split" ui={ui} />
       <MenuItem label="Split Right" icon={<SplitHIcon />} onClick={onSplitRight} ui={ui} />
@@ -361,8 +377,8 @@ function MenuDivider({ ui }: { ui: any }) {
   return <div style={{ height: 1, background: ui.border, margin: '4px 0' }} />
 }
 
-function MenuItem({ label, icon, onClick, ui, danger }: {
-  label: string; icon: React.ReactNode; onClick: () => void; ui: any; danger?: boolean
+function MenuItem({ label, icon, onClick, ui, danger, shortcut }: {
+  label: string; icon: React.ReactNode; onClick: () => void; ui: any; danger?: boolean; shortcut?: string
 }) {
   return (
     <button
@@ -379,7 +395,8 @@ function MenuItem({ label, icon, onClick, ui, danger }: {
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
     >
       <span style={{ color: danger ? ui.danger : ui.textMuted, display: 'flex' }}>{icon}</span>
-      {label}
+      <span style={{ flex: 1 }}>{label}</span>
+      {shortcut && <span style={{ fontSize: 10, color: ui.textDim, marginLeft: 8 }}>{shortcut}</span>}
     </button>
   )
 }
@@ -393,7 +410,8 @@ function IconButton({ children, onClick, title, ui }: {
       style={{
         width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'transparent', border: 'none', color: ui.textMuted,
-        cursor: 'pointer', borderRadius: 6, transition: 'all 0.15s',
+        cursor: 'pointer', borderRadius: 6,
+        transition: 'background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s',
       }}
       onMouseEnter={e => { e.currentTarget.style.background = ui.bgTertiary; e.currentTarget.style.color = ui.text }}
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = ui.textMuted }}
@@ -441,6 +459,12 @@ function SplitHIcon() {
 }
 function SplitVIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="12" x2="21" y2="12" /></svg>
+}
+function ZenIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /></svg>
+}
+function FullscreenIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
 }
 function CloseIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>

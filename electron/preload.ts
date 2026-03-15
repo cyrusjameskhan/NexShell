@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('api', {
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),
   isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  setFullScreen: (flag: boolean) => ipcRenderer.send('window:setFullScreen', flag),
   setOpacity: (opacity: number) => ipcRenderer.invoke('window:setOpacity', opacity),
 
   // PTY

@@ -111,7 +111,7 @@ export default function LogsSection() {
                   ref={searchRef}
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Search logs…"
+                  placeholder="Search logs..."
                   style={{
                     width: '100%',
                     background: ui.inputBg,
@@ -460,7 +460,7 @@ function LogDetail({ log, ui, onBack, onDelete }: { log: SessionLog; ui: any; on
             color: copied ? ui.success : ui.accent,
             cursor: log.outputTail ? 'pointer' : 'not-allowed',
             opacity: log.outputTail ? 1 : 0.4,
-            transition: 'all 0.2s',
+            transition: 'background 0.2s, color 0.2s, opacity 0.2s',
           }}
         >
           {copied ? (

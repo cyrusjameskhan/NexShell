@@ -946,6 +946,458 @@ export const themes: TerminalTheme[] = [
       shadow: 'rgba(0,0,0,0.1)',
     },
   },
+
+  // ── Extra Themes (with visual effects) ─────────────────────────────────────
+
+  {
+    id: 'windows98',
+    name: 'Windows 98',
+    category: 'extra',
+    effects: {
+      globalCss: `
+        /* ── Win98 font: W95FA (MS Sans Serif replica), no antialiasing ── */
+        .win98 * {
+          font-family: 'W95FA', 'Tahoma', 'MS Sans Serif', 'Microsoft Sans Serif', sans-serif !important;
+          font-size: 11px !important;
+          font-weight: normal !important;
+          -webkit-font-smoothing: none !important;
+          font-smooth: never !important;
+          text-rendering: optimizeSpeed !important;
+          letter-spacing: 0 !important;
+          border-radius: 0 !important;
+        }
+
+        /* Headings / labels that should be slightly bolder */
+        .win98 [style*="font-weight: 600"],
+        .win98 [style*="font-weight: 700"],
+        .win98 [style*="fontWeight: 600"],
+        .win98 [style*="fontWeight: 700"] {
+          font-weight: bold !important;
+          font-size: 11px !important;
+        }
+
+        /* Section headers / larger text — cap at 11px */
+        .win98 [style*="font-size: 1"],
+        .win98 [style*="fontSize: 1"] {
+          font-size: 11px !important;
+        }
+
+        /* Win98 raised bevel on ALL buttons */
+        .win98 button {
+          border-radius: 0 !important;
+          box-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #404040, inset 2px 2px 0 #dfdfdf !important;
+          border: none !important;
+          background: #c0c0c0 !important;
+          color: #000000 !important;
+          font-family: 'Tahoma', 'MS Sans Serif', 'Microsoft Sans Serif', 'Arial', sans-serif !important;
+          font-size: 11px !important;
+          -webkit-font-smoothing: none !important;
+        }
+        .win98 button:active,
+        .win98 button.win98-btn-active {
+          box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff, inset 2px 2px 0 #404040, inset -2px -2px 0 #dfdfdf !important;
+          background: #b8b8b8 !important;
+        }
+        /* Win98 select dropdown */
+        .win98 select {
+          border-radius: 0 !important;
+          box-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #404040, inset 2px 2px 0 #dfdfdf !important;
+          border: none !important;
+          background: #c0c0c0 !important;
+          color: #000000 !important;
+        }
+        /* Titlebar window-control buttons — flat, no bevel (handled by Win98Button component) */
+        .win98-titlebar button {
+          background: #c0c0c0 !important;
+          box-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #404040, inset 2px 2px 0 #dfdfdf !important;
+        }
+        .win98-titlebar button:active {
+          box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff, inset 2px 2px 0 #404040, inset -2px -2px 0 #dfdfdf !important;
+        }
+        .win98 input {
+          box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #dfdfdf, inset 2px 2px 0 #404040, inset -2px -2px 0 #ffffff !important;
+        }
+
+        /* Active titlebar */
+        .win98-titlebar {
+          background: linear-gradient(to right, #000080, #1084d0) !important;
+          color: #ffffff !important;
+          font-family: 'Tahoma', 'MS Sans Serif', sans-serif !important;
+          font-size: 11px !important;
+          font-weight: bold !important;
+          -webkit-font-smoothing: none !important;
+        }
+
+        /* Scrollbars */
+        .win98 *::-webkit-scrollbar { width: 16px; height: 16px; }
+        .win98 *::-webkit-scrollbar-track { background: #c0c0c0; }
+        .win98 *::-webkit-scrollbar-thumb {
+          background: #c0c0c0;
+          box-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #404040, inset 2px 2px 0 #dfdfdf;
+        }
+        .win98 *::-webkit-scrollbar-button {
+          background: #c0c0c0;
+          box-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff;
+          display: block;
+          height: 16px;
+        }
+        .win98 *::-webkit-scrollbar-corner { background: #c0c0c0; }
+      `,
+    },
+    colors: {
+      background: '#000000',
+      foreground: '#c0c0c0',
+      cursor: '#ffffff',
+      cursorAccent: '#000000',
+      selectionBackground: '#000080',
+      black: '#000000',
+      red: '#800000',
+      green: '#008000',
+      yellow: '#808000',
+      blue: '#000080',
+      magenta: '#800080',
+      cyan: '#008080',
+      white: '#c0c0c0',
+      brightBlack: '#808080',
+      brightRed: '#ff0000',
+      brightGreen: '#00ff00',
+      brightYellow: '#ffff00',
+      brightBlue: '#0000ff',
+      brightMagenta: '#ff00ff',
+      brightCyan: '#00ffff',
+      brightWhite: '#ffffff',
+    },
+    ui: {
+      bg: '#c0c0c0',
+      bgSecondary: '#d4d0c8',
+      bgTertiary: '#e4e0d8',
+      border: '#808080',
+      text: '#000000',
+      textMuted: '#444444',
+      textDim: '#808080',
+      accent: '#000080',
+      accentHover: '#1084d0',
+      accentMuted: '#d0d8f0',
+      danger: '#ff0000',
+      success: '#008000',
+      warning: '#808000',
+      tabActive: '#c0c0c0',
+      tabInactive: '#d4d0c8',
+      sidebar: '#c0c0c0',
+      titlebar: '#000080',
+      inputBg: '#ffffff',
+      inputBorder: '#808080',
+      inputFocus: '#000080',
+      scrollbar: '#c0c0c0',
+      scrollbarHover: '#a0a0a0',
+      shadow: 'inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #404040, inset 2px 2px 0 #dfdfdf',
+    },
+  },
+
+  {
+    id: 'fallout',
+    name: 'Fallout',
+    category: 'extra',
+    effects: {
+      scanlines: true,
+      scanlineOpacity: 0.14,
+      filmGrain: true,
+      filmGrainOpacity: 0.14,
+      vhsTearing: true,
+      crtGlow: true,
+      crtGlowColor: '#00ff41',
+      crtGlowIntensity: 0.4,
+      flicker: true,
+      flickerIntensity: 0.04,
+      postProcessFilter: 'sepia(1) saturate(5) hue-rotate(80deg) brightness(0.92)',
+      globalCss: `
+        .dos-font * {
+          font-family: 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
+          -webkit-font-smoothing: none !important;
+          font-smooth: never !important;
+          letter-spacing: 0 !important;
+        }
+        .dos-font svg, .dos-font svg * {
+          font-family: inherit !important;
+        }
+      `,
+    },
+    colors: {
+      background: '#0a0e00',
+      foreground: '#20c20e',
+      cursor: '#39ff14',
+      cursorAccent: '#0a0e00',
+      selectionBackground: '#0e3008',
+      black: '#0a0e00',
+      red: '#176b0f',
+      green: '#20c20e',
+      yellow: '#39ff14',
+      blue: '#17a00a',
+      magenta: '#1a8c10',
+      cyan: '#2ddd18',
+      white: '#20c20e',
+      brightBlack: '#0f1a03',
+      brightRed: '#20c20e',
+      brightGreen: '#39ff14',
+      brightYellow: '#5bff3e',
+      brightBlue: '#17a00a',
+      brightMagenta: '#20c20e',
+      brightCyan: '#39ff14',
+      brightWhite: '#7fff6a',
+    },
+    ui: {
+      bg: '#0a0e00',
+      bgSecondary: '#0f1504',
+      bgTertiary: '#141d06',
+      border: '#1a3a10',
+      text: '#20c20e',
+      textMuted: '#178c10',
+      textDim: '#0e5c08',
+      accent: '#39ff14',
+      accentHover: '#5bff3e',
+      accentMuted: '#0e2208',
+      danger: '#20c20e',
+      success: '#39ff14',
+      warning: '#20c20e',
+      tabActive: '#0a0e00',
+      tabInactive: '#0f1504',
+      sidebar: '#070a00',
+      titlebar: '#070a00',
+      inputBg: '#0f1504',
+      inputBorder: '#1a3a10',
+      inputFocus: '#39ff14',
+      scrollbar: '#1a3a10',
+      scrollbarHover: '#1f5214',
+      shadow: 'rgba(32,194,14,0.08)',
+    },
+  },
+  {
+    id: 'amber-crt',
+    name: 'Amber CRT',
+    category: 'extra',
+    effects: {
+      scanlines: true,
+      scanlineOpacity: 0.10,
+      filmGrain: true,
+      filmGrainOpacity: 0.04,
+      crtGlow: true,
+      crtGlowColor: '#ffb000',
+      crtGlowIntensity: 0.35,
+      flicker: true,
+      flickerIntensity: 0.02,
+      postProcessFilter: 'sepia(1) saturate(3.5) hue-rotate(0deg) brightness(0.9)',
+      globalCss: `
+        .dos-font * {
+          font-family: 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
+          -webkit-font-smoothing: none !important;
+          font-smooth: never !important;
+          letter-spacing: 0 !important;
+        }
+        .dos-font svg, .dos-font svg * {
+          font-family: inherit !important;
+        }
+      `,
+    },
+    colors: {
+      background: '#1a0e00',
+      foreground: '#ffb000',
+      cursor: '#ffb000',
+      cursorAccent: '#1a0e00',
+      selectionBackground: '#3d2800',
+      black: '#1a0e00',
+      red: '#ff8c00',
+      green: '#ffb000',
+      yellow: '#ffd044',
+      blue: '#cc8800',
+      magenta: '#ffb000',
+      cyan: '#ffd044',
+      white: '#ffb000',
+      brightBlack: '#2a1a00',
+      brightRed: '#ffa033',
+      brightGreen: '#ffc233',
+      brightYellow: '#ffe066',
+      brightBlue: '#ffb000',
+      brightMagenta: '#ffc233',
+      brightCyan: '#ffe066',
+      brightWhite: '#ffe8aa',
+    },
+    ui: {
+      bg: '#1a0e00',
+      bgSecondary: '#221400',
+      bgTertiary: '#2c1c00',
+      border: '#3d2800',
+      text: '#ffb000',
+      textMuted: '#cc8800',
+      textDim: '#7a5200',
+      accent: '#ffb000',
+      accentHover: '#ffc233',
+      accentMuted: '#2a1a00',
+      danger: '#ff8c00',
+      success: '#ffb000',
+      warning: '#ffd044',
+      tabActive: '#1a0e00',
+      tabInactive: '#221400',
+      sidebar: '#140a00',
+      titlebar: '#140a00',
+      inputBg: '#221400',
+      inputBorder: '#3d2800',
+      inputFocus: '#ffb000',
+      scrollbar: '#3d2800',
+      scrollbarHover: '#664400',
+      shadow: 'rgba(255,176,0,0.08)',
+    },
+  },
+  {
+    id: 'commodore64',
+    name: 'Commodore 64',
+    category: 'extra',
+    effects: {
+      scanlines: true,
+      scanlineOpacity: 0.10,
+      filmGrain: true,
+      filmGrainOpacity: 0.08,
+      crtGlow: true,
+      crtGlowColor: '#5555ff',
+      crtGlowIntensity: 0.2,
+      flicker: true,
+      flickerIntensity: 0.025,
+      postProcessFilter: 'sepia(1) saturate(3) hue-rotate(210deg) brightness(0.9) contrast(1.1)',
+      globalCss: `
+        .c64 * {
+          font-family: 'Commodore 64', 'Courier New', monospace !important;
+          font-size: 14px !important;
+          line-height: 1.6 !important;
+          letter-spacing: 0.5px !important;
+          border-radius: 0 !important;
+          image-rendering: pixelated !important;
+          -webkit-font-smoothing: none !important;
+          font-smooth: never !important;
+        }
+
+        /* Slightly larger for headings */
+        .c64 [style*="font-weight: 600"],
+        .c64 [style*="font-weight: 700"],
+        .c64 [style*="fontWeight: 600"],
+        .c64 [style*="fontWeight: 700"] {
+          font-size: 14px !important;
+          font-weight: normal !important;
+        }
+
+        /* Dithered desktop background pattern */
+        .c64 {
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='4' fill='%233b2b7e'/%3E%3Crect width='2' height='2' x='2' y='0' fill='%235544aa'/%3E%3Crect width='2' height='2' x='0' y='2' fill='%235544aa'/%3E%3C/svg%3E") !important;
+        }
+
+        /* Panel / window boxes — raised 1px pixel border */
+        .c64 [style*="background"] {
+          image-rendering: pixelated;
+        }
+
+        /* Chunky 2px pixel borders everywhere */
+        .c64 button {
+          border: 2px solid #a5a5ff !important;
+          border-right-color: #2222aa !important;
+          border-bottom-color: #2222aa !important;
+          background: #5544aa !important;
+          color: #ffffff !important;
+          font-family: 'Commodore 64', monospace !important;
+          font-size: 12px !important;
+          padding: 4px 8px !important;
+          border-radius: 0 !important;
+          cursor: pointer !important;
+          box-shadow: none !important;
+          text-transform: uppercase !important;
+        }
+        .c64 button:active,
+        .c64 button.c64-btn-active {
+          border-color: #2222aa !important;
+          border-right-color: #a5a5ff !important;
+          border-bottom-color: #a5a5ff !important;
+          background: #3b2b7e !important;
+        }
+
+        /* Input fields — sunken */
+        .c64 input, .c64 select {
+          border: 2px solid #2222aa !important;
+          border-right-color: #a5a5ff !important;
+          border-bottom-color: #a5a5ff !important;
+          background: #3b2b7e !important;
+          color: #a5a5ff !important;
+          font-family: 'Commodore 64', monospace !important;
+          font-size: 12px !important;
+          border-radius: 0 !important;
+          box-shadow: none !important;
+        }
+        .c64 input::placeholder { color: #5555aa !important; }
+        .c64 input:focus {
+          outline: none !important;
+          border-color: #ffffff !important;
+        }
+
+        /* Scrollbars — chunky C64 style */
+        .c64 *::-webkit-scrollbar { width: 12px; height: 12px; }
+        .c64 *::-webkit-scrollbar-track { background: #3b2b7e; }
+        .c64 *::-webkit-scrollbar-thumb {
+          background: #5544aa;
+          border: 2px solid #a5a5ff;
+          border-right-color: #2222aa;
+          border-bottom-color: #2222aa;
+        }
+        .c64 *::-webkit-scrollbar-corner { background: #3b2b7e; }
+
+        /* Selection highlight */
+        .c64 ::selection { background: #a5a5ff; color: #000033; }
+      `,
+    },
+    colors: {
+      background: '#5555aa',
+      foreground: '#d0d0ff',
+      cursor: '#ffffff',
+      cursorAccent: '#5555aa',
+      selectionBackground: '#8888cc',
+      black: '#3b2b7e',
+      red: '#a5a5ff',
+      green: '#d0d0ff',
+      yellow: '#ffffff',
+      blue: '#7777cc',
+      magenta: '#a5a5ff',
+      cyan: '#d0d0ff',
+      white: '#d0d0ff',
+      brightBlack: '#5555aa',
+      brightRed: '#d0d0ff',
+      brightGreen: '#ffffff',
+      brightYellow: '#ffffff',
+      brightBlue: '#a5a5ff',
+      brightMagenta: '#d0d0ff',
+      brightCyan: '#ffffff',
+      brightWhite: '#ffffff',
+    },
+    ui: {
+      bg: '#3b2b7e',
+      bgSecondary: '#5544aa',
+      bgTertiary: '#5544aa',
+      border: '#a5a5ff',
+      text: '#ffffff',
+      textMuted: '#a5a5ff',
+      textDim: '#a5a5ff',
+      accent: '#ffffff',
+      accentHover: '#a5a5ff',
+      accentMuted: '#3b2b7e',
+      danger: '#ffffff',
+      success: '#ffffff',
+      warning: '#a5a5ff',
+      tabActive: '#5544aa',
+      tabInactive: '#3b2b7e',
+      sidebar: '#2a1e6e',
+      titlebar: '#2a1e6e',
+      inputBg: '#3b2b7e',
+      inputBorder: '#a5a5ff',
+      inputFocus: '#ffffff',
+      scrollbar: '#5544aa',
+      scrollbarHover: '#a5a5ff',
+      shadow: 'rgba(0,0,51,0.8)',
+    },
+  },
 ]
 
 export const defaultTheme = themes[0]
@@ -953,3 +1405,4 @@ export const defaultTheme = themes[0]
 export function getThemeById(id: string): TerminalTheme {
   return themes.find(t => t.id === id) || defaultTheme
 }
+
