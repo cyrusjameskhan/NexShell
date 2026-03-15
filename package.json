@@ -1,6 +1,6 @@
 {
   "name": "nexshell",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A sleek cross-platform terminal emulator with AI autocomplete, split panes, SSH/SFTP, and themes",
   "author": {
     "name": "Cyrus Khan",
@@ -39,6 +39,7 @@
     "lucide-react": "^0.468.0",
     "playwright": "^1.58.2",
     "png-to-ico": "^3.0.1",
+    "png2icons": "^2.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "simple-icons": "^16.11.0",
@@ -95,10 +96,32 @@
       "createStartMenuShortcut": true,
       "shortcutName": "NexShell"
     },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ],
+      "icon": "icon.icns",
+      "category": "public.app-category.developer-tools"
+    },
+    "dmg": {
+      "title": "NexShell ${version}",
+      "window": { "width": 540, "height": 380 }
+    },
     "linux": {
       "target": [
-        { "target": "AppImage", "arch": ["x64"] },
-        { "target": "deb", "arch": ["x64"] }
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "icon.png",
       "category": "Utility",
