@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useStore } from '../../hooks'
 import { createTab, setState, setActiveTab, getState } from '../../store'
-import { LibraryTool } from '../../types'
+import { LibraryTool, LibraryToolVersion } from '../../types'
 
 // ── Brand icons ───────────────────────────────────────────────────────────────
 
@@ -220,6 +220,30 @@ const TOOL_ICONS: Record<string, React.ReactNode> = {
       <rect x="5" y="17.2" width="10" height="2.2" rx="1.1" fill="white" opacity="0.9"/>
     </svg>
   ),
+  pyenv: (
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none">
+      <rect width="24" height="24" rx="4" fill="#1a1a2e"/>
+      <path d="M6 8h5a2 2 0 0 1 0 4H6V8z" fill="#366A96" opacity="0.9"/>
+      <path d="M6 12h5a2 2 0 0 1 0 4H8l-2 2v-2" fill="none" stroke="#FFC331" strokeWidth="1.3" strokeLinejoin="round"/>
+      <path d="M13 16h5a2 2 0 0 0 0-4h-5v4z" fill="#FFC331" opacity="0.9"/>
+      <path d="M13 12h5a2 2 0 0 0 0-4h-3l-2-2v2" fill="none" stroke="#366A96" strokeWidth="1.3" strokeLinejoin="round"/>
+    </svg>
+  ),
+  nvm: (
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none">
+      <rect width="24" height="24" rx="4" fill="#1a1a2e"/>
+      <text x="3" y="16" fontSize="10" fontWeight="bold" fontFamily="monospace" fill="#539E43">nvm</text>
+      <circle cx="18" cy="7" r="3" fill="#539E43" opacity="0.3"/>
+      <circle cx="18" cy="7" r="1.5" fill="#539E43"/>
+    </svg>
+  ),
+  fnm: (
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none">
+      <rect width="24" height="24" rx="4" fill="#1a1a2e"/>
+      <text x="3" y="16" fontSize="10" fontWeight="bold" fontFamily="monospace" fill="#FF6B35">fnm</text>
+      <path d="M17 5 L21 9 L17 13" stroke="#FF6B35" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
 }
 
 // ── Tool catalogue ────────────────────────────────────────────────────────────
@@ -247,6 +271,26 @@ const TOOLS: LibraryTool[] = [
     checkCmd: 'node --version',
     installCmds: { win: 'winget install --id OpenJS.NodeJS -e', mac: 'brew install node', linux: 'sudo apt-get install -y nodejs' },
     homepage: 'https://nodejs.org',
+    versions: [
+      {
+        label: '22 LTS',
+        checkCmd: 'node --version',
+        installCmds: {
+          win: 'winget install --id OpenJS.NodeJS.LTS -e',
+          mac: 'brew install node@22',
+          linux: 'curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs',
+        },
+      },
+      {
+        label: '20 LTS',
+        checkCmd: 'node --version',
+        installCmds: {
+          win: 'winget install --id OpenJS.NodeJS.20 -e',
+          mac: 'brew install node@20',
+          linux: 'curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs',
+        },
+      },
+    ],
   },
   {
     id: 'python', name: 'Python', category: 'Runtimes',
@@ -254,6 +298,26 @@ const TOOLS: LibraryTool[] = [
     checkCmd: 'python --version',
     installCmds: { win: 'winget install --id Python.Python.3 -e', mac: 'brew install python', linux: 'sudo apt-get install -y python3' },
     homepage: 'https://python.org',
+    versions: [
+      {
+        label: '3.12',
+        checkCmd: 'python3.12 --version',
+        checkCmdFallbacks: ['py -3.12 --version'],
+        installCmds: { win: 'winget install --id Python.Python.3.12 -e', mac: 'brew install python@3.12', linux: 'sudo apt-get install -y python3.12' },
+      },
+      {
+        label: '3.11',
+        checkCmd: 'python3.11 --version',
+        checkCmdFallbacks: ['py -3.11 --version'],
+        installCmds: { win: 'winget install --id Python.Python.3.11 -e', mac: 'brew install python@3.11', linux: 'sudo apt-get install -y python3.11' },
+      },
+      {
+        label: '3.10',
+        checkCmd: 'python3.10 --version',
+        checkCmdFallbacks: ['py -3.10 --version'],
+        installCmds: { win: 'winget install --id Python.Python.3.10 -e', mac: 'brew install python@3.10', linux: 'sudo apt-get install -y python3.10' },
+      },
+    ],
   },
   {
     id: 'go', name: 'Go', category: 'Runtimes',
@@ -279,6 +343,40 @@ const TOOLS: LibraryTool[] = [
     checkCmd: 'java -version',
     installCmds: { win: 'winget install --id Microsoft.OpenJDK.21 -e', mac: 'brew install openjdk@21', linux: 'sudo apt-get install -y openjdk-21-jdk' },
     homepage: 'https://openjdk.org',
+  },
+  // Version Managers
+  {
+    id: 'pyenv', name: 'pyenv', category: 'Version Managers',
+    description: 'Install and switch between multiple Python versions',
+    checkCmd: 'pyenv --version',
+    installCmds: {
+      win: 'winget install --id pyenv-win.pyenv-win -e',
+      mac: 'brew install pyenv',
+      linux: 'curl https://pyenv.run | bash',
+    },
+    homepage: 'https://github.com/pyenv/pyenv',
+  },
+  {
+    id: 'nvm', name: 'nvm', category: 'Version Managers',
+    description: 'Node Version Manager — install and switch Node versions',
+    checkCmd: 'nvm --version',
+    installCmds: {
+      win: 'winget install --id CoreyButler.NVMforWindows -e',
+      mac: 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash',
+      linux: 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash',
+    },
+    homepage: 'https://github.com/nvm-sh/nvm',
+  },
+  {
+    id: 'fnm', name: 'fnm', category: 'Version Managers',
+    description: 'Fast Node Manager — blazing-fast Node version switching',
+    checkCmd: 'fnm --version',
+    installCmds: {
+      win: 'winget install --id Schniz.fnm -e',
+      mac: 'brew install fnm',
+      linux: 'curl -fsSL https://fnm.vercel.app/install | bash',
+    },
+    homepage: 'https://github.com/Schniz/fnm',
   },
   // Package Managers
   {
@@ -438,6 +536,27 @@ const TOOLS: LibraryTool[] = [
     installCmds: { win: 'winget install --id tailscale.tailscale -e', mac: 'brew install tailscale', linux: 'curl -fsSL https://tailscale.com/install.sh | sh' },
     homepage: 'https://tailscale.com',
   },
+  // Platform
+  {
+    id: 'wsl', name: 'WSL2', category: 'Platform',
+    description: 'Windows Subsystem for Linux — run Linux environments natively',
+    checkCmd: 'wsl --version',
+    installCmds: { win: 'wsl --install' },
+    homepage: 'https://learn.microsoft.com/en-us/windows/wsl',
+    platforms: ['win'],
+  },
+  {
+    id: 'wsl-ubuntu', name: 'Ubuntu (WSL)', category: 'Platform',
+    description: 'Ubuntu distribution for WSL — required by agents like Hermes',
+    checkCmd: 'wsl -d Ubuntu -- echo ok',
+    checkCmdFallbacks: [
+      'wsl -d Ubuntu-24.04 -- echo ok',
+      'wsl -d Ubuntu-22.04 -- echo ok',
+    ],
+    installCmds: { win: 'wsl --install -d Ubuntu' },
+    homepage: 'https://ubuntu.com/wsl',
+    platforms: ['win'],
+  },
   // LLM
   {
     id: 'ollama', name: 'Ollama', category: 'LLM',
@@ -462,8 +581,6 @@ const TOOLS: LibraryTool[] = [
   },
 ]
 
-const CATEGORIES = Array.from(new Set(TOOLS.map(t => t.category)))
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type DetectionStatus = 'idle' | 'checking' | 'installed' | 'missing'
@@ -472,6 +589,9 @@ interface ToolState {
   status: DetectionStatus
   version: string | null
 }
+
+// State key for a versioned entry: "<toolId>:<versionLabel>"
+function versionKey(toolId: string, label: string) { return `${toolId}:${label}` }
 
 // ── Concurrency-limited tool scanner ─────────────────────────────────────────
 
@@ -482,16 +602,26 @@ async function runChecks(
   onResult: (id: string, installed: boolean, version: string | null) => void,
   concurrency = 5
 ) {
-  let idx = 0
-  async function worker() {
-    while (idx < tools.length) {
-      const tool = tools[idx++]
-      const cmds = [tool.checkCmd, ...(tool.checkCmdFallbacks || [])]
-      const result = await window.api.checkTool(cmds)
-      onResult(tool.id, result.installed, result.version)
+  // Flatten tools + their versions into individual check tasks
+  type CheckTask = { id: string; checkCmd: string; checkCmdFallbacks?: string[] }
+  const tasks: CheckTask[] = []
+  for (const tool of tools) {
+    tasks.push({ id: tool.id, checkCmd: tool.checkCmd, checkCmdFallbacks: tool.checkCmdFallbacks })
+    for (const v of tool.versions ?? []) {
+      tasks.push({ id: versionKey(tool.id, v.label), checkCmd: v.checkCmd, checkCmdFallbacks: v.checkCmdFallbacks })
     }
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, tools.length) }, worker))
+
+  let idx = 0
+  async function worker() {
+    while (idx < tasks.length) {
+      const task = tasks[idx++]
+      const cmds = [task.checkCmd, ...(task.checkCmdFallbacks || [])]
+      const result = await window.api.checkTool(cmds)
+      onResult(task.id, result.installed, result.version)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker))
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -525,6 +655,10 @@ export default function LibrariesSection() {
         const next = { ...prev }
         for (const tool of TOOLS) {
           if (!next[tool.id]) next[tool.id] = { status: 'checking', version: null }
+          for (const v of tool.versions ?? []) {
+            const key = versionKey(tool.id, v.label)
+            if (!next[key]) next[key] = { status: 'checking', version: null }
+          }
         }
         return next
       })
@@ -542,18 +676,35 @@ export default function LibrariesSection() {
   }, [])
 
   const recheckTool = useCallback(async (tool: LibraryTool) => {
-    setToolStates(prev => ({ ...prev, [tool.id]: { status: 'checking', version: null } }))
+    const keysToCheck: string[] = [tool.id, ...(tool.versions ?? []).map(v => versionKey(tool.id, v.label))]
+    setToolStates(prev => {
+      const next = { ...prev }
+      for (const k of keysToCheck) next[k] = { status: 'checking', version: null }
+      return next
+    })
     const cmds = [tool.checkCmd, ...(tool.checkCmdFallbacks || [])]
     const result = await window.api.checkTool(cmds)
     setToolStates(prev => ({
       ...prev,
       [tool.id]: { status: result.installed ? 'installed' : 'missing', version: result.version },
     }))
+    for (const v of tool.versions ?? []) {
+      const key = versionKey(tool.id, v.label)
+      const vCmds = [v.checkCmd, ...(v.checkCmdFallbacks || [])]
+      const vResult = await window.api.checkTool(vCmds)
+      setToolStates(prev => ({
+        ...prev,
+        [key]: { status: vResult.installed ? 'installed' : 'missing', version: vResult.version },
+      }))
+    }
   }, [])
 
-  function installTool(tool: LibraryTool) {
-    const cmd = tool.installCmds[platform]
+  function installTool(tool: LibraryTool, ver?: LibraryToolVersion) {
+    const source = ver ?? tool
+    const cmd = source.installCmds[platform]
     if (!cmd) return
+
+    const stateKey = ver ? versionKey(tool.id, ver.label) : tool.id
 
     unlistenRef.current?.()
     unlistenRef.current = null
@@ -571,14 +722,13 @@ export default function LibrariesSection() {
       await window.api.installTool(session.id, cmd)
 
       let resolved = false
-      let lastDataAt = Date.now()
       let pollTimer: ReturnType<typeof setTimeout> | null = null
 
       // Poll the check command once the PTY goes quiet for 2s.
       // This is much more reliable than trying to parse installer output.
       async function pollUntilInstalled(attemptsLeft: number) {
         if (resolved) return
-        const cmds = [tool.checkCmd, ...(tool.checkCmdFallbacks || [])]
+        const cmds = [source.checkCmd, ...(source.checkCmdFallbacks || [])]
         const result = await window.api.checkTool(cmds)
         if (result.installed) {
           resolved = true
@@ -586,7 +736,7 @@ export default function LibrariesSection() {
           unlistenRef.current = null
           setToolStates(prev => ({
             ...prev,
-            [tool.id]: { status: 'installed', version: result.version },
+            [stateKey]: { status: 'installed', version: result.version },
           }))
         } else if (attemptsLeft > 0) {
           pollTimer = setTimeout(() => pollUntilInstalled(attemptsLeft - 1), 3000)
@@ -646,21 +796,25 @@ export default function LibrariesSection() {
     }, 700)
   }
 
-  const filtered = TOOLS.filter(t => {
+  const platformTools = TOOLS.filter(t => !t.platforms || t.platforms.includes(platform))
+
+  const filtered = platformTools.filter(t => {
     const q = search.toLowerCase()
     const matchSearch = !q || t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q) || t.category.toLowerCase().includes(q)
     const matchCat = !activeCategory || t.category === activeCategory
     return matchSearch && matchCat
   })
 
-  const grouped = CATEGORIES.reduce<Record<string, LibraryTool[]>>((acc, cat) => {
+  const platformCategories = Array.from(new Set(platformTools.map(t => t.category)))
+
+  const grouped = platformCategories.reduce<Record<string, LibraryTool[]>>((acc, cat) => {
     const items = filtered.filter(t => t.category === cat)
     if (items.length) acc[cat] = items
     return acc
   }, {})
 
-  const installedCount = TOOLS.filter(t => toolStates[t.id]?.status === 'installed').length
-  const checkingCount = TOOLS.filter(t => toolStates[t.id]?.status === 'checking').length
+  const installedCount = platformTools.filter(t => toolStates[t.id]?.status === 'installed').length
+  const checkingCount = platformTools.filter(t => toolStates[t.id]?.status === 'checking').length
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
@@ -692,7 +846,7 @@ export default function LibrariesSection() {
           ) : (
             <span style={{ fontSize: 10, color: ui.textDim }}>
               <span style={{ color: ui.success, fontWeight: 600 }}>{installedCount}</span>
-              <span> / {TOOLS.length} installed</span>
+              <span> / {platformTools.length} installed</span>
             </span>
           )}
           <div style={{ flex: 1 }} />
@@ -701,7 +855,12 @@ export default function LibrariesSection() {
               await window.api.invalidateLibraryPathCache()
               setToolStates(prev => {
                 const next = { ...prev }
-                for (const tool of TOOLS) next[tool.id] = { status: 'checking', version: null }
+                for (const tool of TOOLS) {
+                  next[tool.id] = { status: 'checking', version: null }
+                  for (const v of tool.versions ?? []) {
+                    next[versionKey(tool.id, v.label)] = { status: 'checking', version: null }
+                  }
+                }
                 return next
               })
               await runChecks(TOOLS, (id, installed, version) => {
@@ -719,7 +878,7 @@ export default function LibrariesSection() {
         {/* Category pills */}
         <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
           <CategoryPill label="All" active={!activeCategory} onClick={() => setActiveCategory(null)} ui={ui} />
-          {CATEGORIES.map(cat => (
+          {platformCategories.map(cat => (
             <CategoryPill key={cat} label={cat} active={activeCategory === cat} onClick={() => setActiveCategory(c => c === cat ? null : cat)} ui={ui} />
           ))}
         </div>
@@ -738,9 +897,13 @@ export default function LibrariesSection() {
                   key={tool.id}
                   tool={tool}
                   state={toolStates[tool.id] ?? { status: 'idle', version: null }}
+                  versionStates={Object.fromEntries(
+                    (tool.versions ?? []).map(v => [v.label, toolStates[versionKey(tool.id, v.label)] ?? { status: 'idle' as DetectionStatus, version: null }])
+                  )}
                   platform={platform}
                   ui={ui}
                   onInstall={() => installTool(tool)}
+                  onInstallVersion={(ver) => installTool(tool, ver)}
                   onRecheck={() => recheckTool(tool)}
                 />
               ))}
@@ -763,16 +926,34 @@ export default function LibrariesSection() {
 
 // ── Tool Row ──────────────────────────────────────────────────────────────────
 
-function ToolRow({ tool, state, platform, ui, onInstall, onRecheck }: {
+function StatusBadge({ status, ui }: { status: DetectionStatus; ui: any }) {
+  if (status === 'checking') return (
+    <svg style={{ animation: 'spin 1s linear infinite' }} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={ui.textDim} strokeWidth="3">
+      <circle cx="12" cy="12" r="9" strokeDasharray="30 20" strokeLinecap="round" />
+    </svg>
+  )
+  if (status === 'installed') return (
+    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={ui.success} strokeWidth="3.5" strokeLinecap="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  )
+  return <div style={{ width: 6, height: 6, borderRadius: '50%', background: `${ui.danger}88` }} />
+}
+
+function ToolRow({ tool, state, versionStates, platform, ui, onInstall, onInstallVersion, onRecheck }: {
   tool: LibraryTool
   state: ToolState
+  versionStates: Record<string, ToolState>
   platform: 'win' | 'mac' | 'linux'
   ui: any
   onInstall: () => void
+  onInstallVersion: (ver: LibraryToolVersion) => void
   onRecheck: () => void
 }) {
   const [hovered, setHovered] = useState(false)
+  const [versionsOpen, setVersionsOpen] = useState(false)
   const hasInstallCmd = !!tool.installCmds[platform]
+  const hasVersions = (tool.versions?.length ?? 0) > 0
   const icon = TOOL_ICONS[tool.id]
 
   return (
@@ -780,79 +961,142 @@ function ToolRow({ tool, state, platform, ui, onInstall, onRecheck }: {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: '7px 8px',
         borderRadius: 6,
         background: hovered ? ui.bgTertiary : 'transparent',
-        border: `1px solid ${hovered ? ui.border : 'transparent'}`,
+        border: `1px solid ${hovered || versionsOpen ? ui.border : 'transparent'}`,
         transition: 'background 0.1s',
+        overflow: 'hidden',
       }}
     >
-      {/* Icon box with status badge */}
-      <div style={{ position: 'relative', flexShrink: 0, width: 30, height: 30 }}>
-        <div style={{
-          width: 30, height: 30, borderRadius: 7,
-          background: ui.bg,
-          border: `1px solid ${ui.border}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          overflow: 'hidden',
-          opacity: state.status === 'missing' ? 0.45 : 1,
-          transition: 'opacity 0.2s',
-        }}>
-          {icon
-            ? <div style={{ width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</div>
-            : <span style={{ fontSize: 11, fontWeight: 700, color: ui.textMuted }}>{tool.name.slice(0, 2).toUpperCase()}</span>
-          }
+      {/* Main row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px' }}>
+        {/* Icon box with status badge */}
+        <div style={{ position: 'relative', flexShrink: 0, width: 30, height: 30 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 7,
+            background: ui.bg,
+            border: `1px solid ${ui.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden',
+            opacity: state.status === 'missing' ? 0.45 : 1,
+            transition: 'opacity 0.2s',
+          }}>
+            {icon
+              ? <div style={{ width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</div>
+              : <span style={{ fontSize: 11, fontWeight: 700, color: ui.textMuted }}>{tool.name.slice(0, 2).toUpperCase()}</span>
+            }
+          </div>
+          <div style={{
+            position: 'absolute', bottom: -2, right: -2,
+            width: 12, height: 12, borderRadius: '50%',
+            background: ui.bgSecondary,
+            border: `1.5px solid ${ui.bgSecondary}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <StatusBadge status={state.status} ui={ui} />
+          </div>
         </div>
-        {/* Status badge */}
-        <div style={{
-          position: 'absolute', bottom: -2, right: -2,
-          width: 12, height: 12, borderRadius: '50%',
-          background: ui.bgSecondary,
-          border: `1.5px solid ${ui.bgSecondary}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {state.status === 'checking' ? (
-            <svg style={{ animation: 'spin 1s linear infinite' }} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={ui.textDim} strokeWidth="3">
-              <circle cx="12" cy="12" r="9" strokeDasharray="30 20" strokeLinecap="round" />
-            </svg>
-          ) : state.status === 'installed' ? (
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={ui.success} strokeWidth="3.5" strokeLinecap="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          ) : (
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: `${ui.danger}88` }} />
-          )}
+
+        {/* Name + description */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: ui.text }}>{tool.name}</span>
+            {state.status === 'installed' && state.version && (
+              <span style={{ fontSize: 9, color: ui.success, background: `${ui.success}18`, padding: '1px 5px', borderRadius: 3, fontWeight: 500 }}>
+                v{state.version}
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: 10, color: ui.textDim, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {tool.description}
+          </div>
         </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 3, flexShrink: 0, opacity: hovered ? 1 : (state.status === 'missing' ? 0.6 : 0), transition: 'opacity 0.15s' }}>
+          {state.status === 'installed' ? (
+            <SmallBtn label="Recheck" ui={ui} onClick={onRecheck} />
+          ) : state.status === 'missing' && hasInstallCmd ? (
+            <SmallBtn label="Install" accent ui={ui} onClick={onInstall} />
+          ) : state.status === 'missing' && !hasInstallCmd ? (
+            <span style={{ fontSize: 10, color: ui.textDim, padding: '2px 4px' }}>Manual</span>
+          ) : null}
+        </div>
+
+        {/* Versions toggle */}
+        {hasVersions && (
+          <button
+            onClick={() => setVersionsOpen(o => !o)}
+            title="Show version options"
+            style={{
+              flexShrink: 0,
+              background: 'transparent',
+              border: 'none',
+              padding: '2px 3px',
+              cursor: 'pointer',
+              color: versionsOpen ? ui.accent : ui.textMuted,
+              display: 'flex',
+              alignItems: 'center',
+              opacity: hovered || versionsOpen ? 1 : 0.4,
+              transition: 'opacity 0.15s, color 0.15s',
+            }}
+          >
+            <svg
+              width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+              style={{ transform: versionsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        )}
       </div>
 
-      {/* Name + description */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: ui.text }}>{tool.name}</span>
-          {state.status === 'installed' && state.version && (
-            <span style={{ fontSize: 9, color: ui.success, background: `${ui.success}18`, padding: '1px 5px', borderRadius: 3, fontWeight: 500 }}>
-              v{state.version}
-            </span>
-          )}
-        </div>
-        <div style={{ fontSize: 10, color: ui.textDim, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {tool.description}
-        </div>
-      </div>
+      {/* Version rows */}
+      {hasVersions && versionsOpen && (
+        <div style={{ borderTop: `1px solid ${ui.border}`, padding: '4px 8px 6px 48px' }}>
+          {tool.versions!.map(ver => {
+            const vs = versionStates[ver.label] ?? { status: 'idle' as DetectionStatus, version: null }
+            const hasVerCmd = !!ver.installCmds[platform]
+            return (
+              <div
+                key={ver.label}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: `1px solid ${ui.border}22` }}
+              >
+                {/* Mini status dot */}
+                <div style={{
+                  width: 16, height: 16, borderRadius: '50%',
+                  background: ui.bg,
+                  border: `1px solid ${ui.border}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <StatusBadge status={vs.status} ui={ui} />
+                </div>
 
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: 3, flexShrink: 0, opacity: hovered ? 1 : (state.status === 'missing' ? 0.6 : 0), transition: 'opacity 0.15s' }}>
-        {state.status === 'installed' ? (
-          <SmallBtn label="Recheck" ui={ui} onClick={onRecheck} />
-        ) : state.status === 'missing' && hasInstallCmd ? (
-          <SmallBtn label="Install" accent ui={ui} onClick={onInstall} />
-        ) : state.status === 'missing' && !hasInstallCmd ? (
-          <span style={{ fontSize: 10, color: ui.textDim, padding: '2px 4px' }}>Manual</span>
-        ) : null}
-      </div>
+                <span style={{ fontSize: 11, color: ui.text, fontWeight: 500, minWidth: 50 }}>{ver.label}</span>
+
+                {vs.status === 'installed' && vs.version && (
+                  <span style={{ fontSize: 9, color: ui.success, background: `${ui.success}18`, padding: '1px 5px', borderRadius: 3 }}>
+                    v{vs.version}
+                  </span>
+                )}
+
+                <div style={{ flex: 1 }} />
+
+                {vs.status === 'missing' && hasVerCmd && (
+                  <SmallBtn label="Install" accent ui={ui} onClick={() => onInstallVersion(ver)} />
+                )}
+                {vs.status === 'missing' && !hasVerCmd && (
+                  <span style={{ fontSize: 10, color: ui.textDim }}>Manual</span>
+                )}
+                {vs.status === 'installed' && (
+                  <span style={{ fontSize: 10, color: ui.textDim }}>Installed</span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

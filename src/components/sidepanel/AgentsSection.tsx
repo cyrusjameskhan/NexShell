@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useStore } from '../../hooks'
-import { createTab, setState, setActiveTab, getState, refreshAiStatus } from '../../store'
+import { createTab, setState, setActiveTab, getState, refreshAiStatus, toggleSidePanel } from '../../store'
 
 // ── Agent catalogue ────────────────────────────────────────────────────────────
 
@@ -20,6 +20,22 @@ interface AgentTool {
   docsUrl?: string
   /** If true, this agent uses the built-in AI provider instead of a CLI tool */
   isBuiltinLlm?: boolean
+  /** If true, Windows install runs inside WSL and requires an Ubuntu distro with bash */
+  requiresWSL?: boolean
+  /** Platforms this agent supports. If absent, all platforms are supported. */
+  supportedPlatforms?: ('win' | 'mac' | 'linux')[]
+}
+
+const WSL_DISTROS = ['Ubuntu', 'Ubuntu-24.04', 'Ubuntu-22.04'] as const
+
+function agentRequiresNpm(agent: AgentTool, platform: 'win' | 'mac' | 'linux'): boolean {
+  const cmd = agent.installCmds[platform]
+  return !!cmd && cmd.includes('npm install')
+}
+
+function agentRequiresPip(agent: AgentTool, platform: 'win' | 'mac' | 'linux'): boolean {
+  const cmd = agent.installCmds[platform]
+  return !!cmd && (cmd.includes('pip install') || cmd.includes('pip3 install'))
 }
 
 const AGENTS: AgentTool[] = [
@@ -75,9 +91,9 @@ const AGENTS: AgentTool[] = [
     description: 'AI pair programming in your terminal — set OPENAI_API_KEY or ANTHROPIC_API_KEY before launching',
     checkCmd: 'aider --version',
     installCmds: {
-      win: 'pip install aider-chat',
-      mac: 'pip install aider-chat',
-      linux: 'pip install aider-chat',
+      win: 'pip install aider-install && aider-install',
+      mac: 'pip install aider-install && aider-install',
+      linux: 'pip install aider-install && aider-install',
     },
     homepage: 'https://aider.chat',
     docsUrl: 'https://aider.chat/docs/usage.html',
@@ -162,10 +178,11 @@ const AGENTS: AgentTool[] = [
     description: 'Open-source AI coding agent — connects to any model via config',
     checkCmd: 'cn --version',
     installCmds: {
-      win: 'curl -fsSL https://raw.githubusercontent.com/continuedev/continue/main/extensions/cli/scripts/install.sh | bash',
+      win: '$tmp = Join-Path $env:TEMP "continue_install.sh"; Invoke-WebRequest -Uri "https://raw.githubusercontent.com/continuedev/continue/main/extensions/cli/scripts/install.sh" -UseBasicParsing -OutFile $tmp; $wslPath = wsl -d Ubuntu -- wslpath -u ($tmp -replace "\\\\","/"); wsl -d Ubuntu -- bash $wslPath',
       mac: 'curl -fsSL https://raw.githubusercontent.com/continuedev/continue/main/extensions/cli/scripts/install.sh | bash',
       linux: 'curl -fsSL https://raw.githubusercontent.com/continuedev/continue/main/extensions/cli/scripts/install.sh | bash',
     },
+    requiresWSL: true,
     setupCmd: 'cn login',
     launchCmd: 'cn',
     configPath: '~/.continue/config.yaml',
@@ -200,7 +217,7 @@ const AGENTS: AgentTool[] = [
     description: 'Ultra-lightweight Go AI agent — <10MB RAM, multi-LLM, runs anywhere',
     checkCmd: 'picoclaw --version',
     installCmds: {
-      win: 'powershell -c "Invoke-WebRequest https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw_Windows_x86_64.zip -OutFile picoclaw.zip; Expand-Archive picoclaw.zip -DestinationPath $env:LOCALAPPDATA\\picoclaw; $env:Path += \';\' + $env:LOCALAPPDATA + \'\\picoclaw\'"',
+      win: '$zip = Join-Path $env:TEMP "picoclaw.zip"; $dest = Join-Path $env:LOCALAPPDATA "picoclaw"; Invoke-WebRequest "https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw_Windows_x86_64.zip" -OutFile $zip; Expand-Archive -Path $zip -DestinationPath $dest -Force; $userPath = [Environment]::GetEnvironmentVariable("Path", "User"); if (($userPath -split ";") -notcontains $dest) { [Environment]::SetEnvironmentVariable("Path", "$userPath;$dest", "User") }; $env:Path += ";$dest"',
       mac: 'curl -fsSL https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw_Darwin_arm64.tar.gz | tar -xz -C /usr/local/bin',
       linux: 'curl -fsSL https://github.com/sipeed/picoclaw/releases/latest/download/picoclaw_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin',
     },
@@ -216,13 +233,14 @@ const AGENTS: AgentTool[] = [
     name: 'Hermes',
     command: 'hermes',
     category: 'Open Source',
-    description: 'Self-improving AI coding agent by Nous Research — TUI, skills, multi-provider (OpenRouter, Anthropic, Ollama)',
+    description: 'Self-improving AI coding agent by Nous Research — TUI, skills, multi-provider (OpenRouter, Anthropic, Ollama). On Windows: if install fails with DNS errors, run "Fix WSL DNS" from Libraries first.',
     checkCmd: 'hermes --version',
     installCmds: {
-      win: 'wsl bash -c "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"',
+      win: '$tmp = Join-Path $env:TEMP "hermes_install.sh"; Invoke-WebRequest -Uri "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh" -UseBasicParsing -OutFile $tmp; $wslPath = wsl -d Ubuntu -- wslpath -u ($tmp -replace "\\\\","/"); wsl -d Ubuntu -- bash $wslPath',
       mac: 'curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash',
       linux: 'curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash',
     },
+    requiresWSL: true,
     setupCmd: 'hermes setup',
     launchCmd: 'hermes',
     configPath: '~/.hermes/config.yaml',
@@ -230,8 +248,6 @@ const AGENTS: AgentTool[] = [
     docsUrl: 'https://hermes-agent.nousresearch.com/docs/user-guide/cli',
   },
 ]
-
-const CATEGORIES = Array.from(new Set(AGENTS.map(a => a.category)))
 
 // ── Agent icons ────────────────────────────────────────────────────────────────
 
@@ -425,6 +441,12 @@ export default function AgentsSection() {
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const unlistenRef = useRef<(() => void) | null>(null)
+  // 'ready' = WSL + Ubuntu w/ bash, 'no-distro' = WSL installed but no Ubuntu, 'no-wsl' = no WSL at all
+  const [wslStatus, setWslStatus] = useState<'checking' | 'ready' | 'no-distro' | 'no-wsl'>('checking')
+  const [wslNetworkReady, setWslNetworkReady] = useState<boolean | null>(null)
+  const [wslDistro, setWslDistro] = useState<string>('Ubuntu')
+  const [npmReady, setNpmReady] = useState<boolean | null>(null)
+  const [pipReady, setPipReady] = useState<boolean | null>(null)
 
   const platform: 'win' | 'mac' | 'linux' =
     navigator.platform.toLowerCase().includes('win') ? 'win'
@@ -432,6 +454,54 @@ export default function AgentsSection() {
       : 'linux'
 
   const defaultAgentCommand = settings.agentCommand || 'claude'
+
+  // On Windows, check if WSL + Ubuntu w/ bash is available for agents that need it
+  useEffect(() => {
+    if (platform !== 'win') { setWslStatus('ready'); setWslNetworkReady(true); return }
+    ;(async () => {
+      try {
+        const wslCheck = await window.api.checkTool('wsl --version')
+        if (!wslCheck.installed) {
+          setWslStatus('no-wsl')
+          setWslNetworkReady(false)
+          return
+        }
+        for (const distro of WSL_DISTROS) {
+          const r = await window.api.checkTool(`wsl -d ${distro} -- bash --version`)
+          if (r.installed) {
+            setWslStatus('ready')
+            setWslDistro(distro)
+            const net = await window.api.checkTool(`wsl -d ${distro} -- getent hosts raw.githubusercontent.com`)
+            setWslNetworkReady(net.installed)
+            return
+          }
+        }
+        setWslStatus('no-distro')
+        setWslNetworkReady(false)
+      } catch {
+        setWslStatus('no-wsl')
+        setWslNetworkReady(false)
+      }
+    })()
+  }, [platform])
+
+  // Check npm and pip availability (for native installs)
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const [npm, pip, pip3] = await Promise.all([
+          window.api.checkTool('npm --version'),
+          window.api.checkTool('pip --version'),
+          window.api.checkTool('pip3 --version'),
+        ])
+        setNpmReady(npm.installed)
+        setPipReady(pip.installed || pip3.installed)
+      } catch {
+        setNpmReady(false)
+        setPipReady(false)
+      }
+    })()
+  }, [])
 
   // Check all agents on mount
   useEffect(() => {
@@ -559,8 +629,31 @@ export default function AgentsSection() {
       setState({ settingsOpen: true })
       return
     }
-    const cmd = agent.installCmds[platform]
+    if (platform === 'win' && agent.requiresWSL && wslStatus === 'no-wsl') {
+      window.api.openExternal('https://learn.microsoft.com/en-us/windows/wsl/install')
+      return
+    }
+    if (platform === 'win' && agent.requiresWSL && (wslStatus === 'no-distro' || wslNetworkReady === false)) {
+      fixWslPrereqs()
+      return
+    }
+    if (agentRequiresNpm(agent, platform) && !npmReady) {
+      setState({ libraryFilter: 'Runtimes' })
+      toggleSidePanel('libraries')
+      return
+    }
+    if (agentRequiresPip(agent, platform) && !pipReady) {
+      setState({ libraryFilter: 'Runtimes' })
+      toggleSidePanel('libraries')
+      return
+    }
+    let cmd = agent.installCmds[platform]
     if (!cmd) return
+    if (platform === 'win' && agent.requiresWSL && wslDistro !== 'Ubuntu') {
+      cmd = cmd.replaceAll('wsl -d Ubuntu', `wsl -d "${wslDistro}"`)
+    }
+
+    const installUbuntuFirst = platform === 'win' && agent.requiresWSL && wslStatus === 'no-distro'
 
     unlistenRef.current?.()
     unlistenRef.current = null
@@ -574,6 +667,9 @@ export default function AgentsSection() {
     setState({ sidePanelOpen: false })
 
     setTimeout(async () => {
+      if (installUbuntuFirst) {
+        await window.api.installTool(session.id, 'wsl --install -d Ubuntu')
+      }
       await window.api.installTool(session.id, cmd)
 
       let resolved = false
@@ -639,21 +735,98 @@ export default function AgentsSection() {
     }, 700)
   }
 
-  const filtered = AGENTS.filter(a => {
+  async function recheckWslStatus() {
+    try {
+      const wslCheck = await window.api.checkTool('wsl --version')
+      if (!wslCheck.installed) {
+        setWslStatus('no-wsl')
+        setWslNetworkReady(false)
+        return
+      }
+      for (const distro of WSL_DISTROS) {
+        const r = await window.api.checkTool(`wsl -d ${distro} -- bash --version`)
+        if (r.installed) {
+          setWslStatus('ready')
+          setWslDistro(distro)
+          const net = await window.api.checkTool(`wsl -d ${distro} -- getent hosts raw.githubusercontent.com`)
+          setWslNetworkReady(net.installed)
+          return
+        }
+      }
+      setWslStatus('no-distro')
+      setWslNetworkReady(false)
+    } catch {
+      setWslStatus('no-wsl')
+      setWslNetworkReady(false)
+    }
+  }
+
+  function fixWslPrereqs() {
+    setWslStatus('checking')
+    setWslNetworkReady(null)
+    const needsDistro = wslStatus === 'no-distro'
+    const session = createTab()
+    setTimeout(async () => {
+      const { tabs } = getState()
+      const idx = tabs.findIndex(t => t.kind === 'session' && t.sessionId === session.id)
+      if (idx !== -1) setActiveTab(idx)
+      setState({ sidePanelOpen: false })
+
+      const targetDistro = needsDistro ? 'Ubuntu' : wslDistro
+      const steps = [
+        '$cfg = Join-Path $env:USERPROFILE \'.wslconfig\'',
+        '"[wsl2]`nnetworkingMode=NAT`ndnsTunneling=true`nautoProxy=true`n" | Set-Content -Path $cfg -Encoding ascii',
+        'Write-Host "WSL config written."',
+        'wsl --shutdown',
+        'Write-Host "WSL restarted."',
+      ]
+      if (needsDistro) {
+        steps.push('wsl --install -d Ubuntu')
+      }
+      steps.push(
+        `wsl --set-default ${targetDistro}`,
+        'Write-Host "Verifying network..."',
+        `wsl -d ${targetDistro} -- bash -lc "ip route; getent hosts raw.githubusercontent.com || echo DNS_FAILED"`,
+        'Write-Host "PREREQS_DONE"',
+      )
+      await window.api.installTool(session.id, steps.join('; '))
+
+      const unlisten = window.api.onPtyData(session.id, (data: string) => {
+        if (data.includes('PREREQS_DONE') || data.includes('DNS_FAILED')) {
+          unlisten()
+          setTimeout(() => recheckWslStatus(), 1500)
+        }
+      })
+      setTimeout(() => {
+        unlisten()
+        recheckWslStatus()
+      }, 120_000)
+    }, 700)
+  }
+
+  const platformAgents = AGENTS.filter(a => {
+    if (a.supportedPlatforms && !a.supportedPlatforms.includes(platform)) return false
+    if (a.isBuiltinLlm) return true
+    return !!a.installCmds[platform] || agentStates[a.id]?.status === 'installed'
+  })
+
+  const filtered = platformAgents.filter(a => {
     const q = search.toLowerCase()
     const matchSearch = !q || a.name.toLowerCase().includes(q) || a.description.toLowerCase().includes(q) || a.category.toLowerCase().includes(q)
     const matchCat = !activeCategory || a.category === activeCategory
     return matchSearch && matchCat
   })
 
-  const grouped = CATEGORIES.reduce<Record<string, AgentTool[]>>((acc, cat) => {
+  const platformCategories = Array.from(new Set(platformAgents.map(a => a.category)))
+
+  const grouped = platformCategories.reduce<Record<string, AgentTool[]>>((acc, cat) => {
     const items = filtered.filter(a => a.category === cat)
     if (items.length) acc[cat] = items
     return acc
   }, {})
 
-  const installedCount = AGENTS.filter(a => agentStates[a.id]?.status === 'installed').length
-  const checkingCount = AGENTS.filter(a => agentStates[a.id]?.status === 'checking').length
+  const installedCount = platformAgents.filter(a => agentStates[a.id]?.status === 'installed').length
+  const checkingCount = platformAgents.filter(a => agentStates[a.id]?.status === 'checking').length
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
@@ -689,12 +862,24 @@ export default function AgentsSection() {
           ) : (
             <span style={{ fontSize: 10, color: ui.textDim }}>
               <span style={{ color: ui.success, fontWeight: 600 }}>{installedCount}</span>
-              <span> / {AGENTS.length} installed</span>
+              <span> / {platformAgents.length} installed</span>
             </span>
           )}
           <div style={{ flex: 1 }} />
           <button
             onClick={() => {
+              recheckWslStatus()
+              ;(async () => {
+                try {
+                  const [npm, pip, pip3] = await Promise.all([
+                    window.api.checkTool('npm --version'),
+                    window.api.checkTool('pip --version'),
+                    window.api.checkTool('pip3 --version'),
+                  ])
+                  setNpmReady(npm.installed)
+                  setPipReady(pip.installed || pip3.installed)
+                } catch { setNpmReady(false); setPipReady(false) }
+              })()
               const next: Record<string, AgentState> = {}
               for (const a of AGENTS) next[a.id] = { status: 'checking', version: null, configured: false }
               setAgentStates(next)
@@ -720,7 +905,7 @@ export default function AgentsSection() {
         {/* Category pills */}
         <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
           <CategoryPill label="All" active={!activeCategory} onClick={() => setActiveCategory(null)} ui={ui} />
-          {CATEGORIES.map(cat => (
+          {platformCategories.map(cat => (
             <CategoryPill key={cat} label={cat} active={activeCategory === cat} onClick={() => setActiveCategory(c => c === cat ? null : cat)} ui={ui} />
           ))}
         </div>
@@ -742,11 +927,16 @@ export default function AgentsSection() {
                   platform={platform}
                   ui={ui}
                   isDefault={defaultAgentCommand === agent.command}
+                  wslStatus={wslStatus}
+                  wslNetworkReady={wslNetworkReady}
+                  npmReady={npmReady}
+                  pipReady={pipReady}
                   onInstall={() => installAgent(agent)}
                   onRecheck={() => recheckAgent(agent)}
                   onLaunch={() => launchAgent(agent)}
                   onSetup={() => setupAgent(agent)}
                   onSetDefault={() => setDefaultAgent(agent.command)}
+                  onFixWslPrereqs={() => fixWslPrereqs()}
                 />
               ))}
             </div>
@@ -858,23 +1048,33 @@ function DefaultAgentBanner({ defaultCommand, agents, agentStates, ui }: {
 
 // ── Agent Row ──────────────────────────────────────────────────────────────────
 
-function AgentRow({ agent, state, platform, ui, isDefault, onInstall, onRecheck, onLaunch, onSetup, onSetDefault }: {
+function AgentRow({ agent, state, platform, ui, isDefault, wslStatus, wslNetworkReady, npmReady, pipReady, onInstall, onRecheck, onLaunch, onSetup, onSetDefault, onFixWslPrereqs }: {
   agent: AgentTool
   state: AgentState
   platform: 'win' | 'mac' | 'linux'
   ui: any
   isDefault: boolean
+  wslStatus: 'checking' | 'ready' | 'no-distro' | 'no-wsl'
+  wslNetworkReady: boolean | null
+  npmReady: boolean | null
+  pipReady: boolean | null
   onInstall: () => void
   onRecheck: () => void
   onLaunch: () => void
   onSetup: () => void
   onSetDefault: () => void
+  onFixWslPrereqs: () => void
 }) {
   const [hovered, setHovered] = useState(false)
   const hasInstallCmd = !!agent.installCmds[platform]
   const icon = AGENT_ICONS[agent.id]
   const isInstalled = state.status === 'installed'
   const needsSetup = isInstalled && !!agent.setupCmd && !state.configured
+  const needsWSL = platform === 'win' && !!agent.requiresWSL && wslStatus !== 'ready'
+  const wslMissing = wslStatus === 'no-wsl'
+  const needsWslNetwork = platform === 'win' && !!agent.requiresWSL && wslStatus === 'ready' && wslNetworkReady === false
+  const needsNpm = agentRequiresNpm(agent, platform) && npmReady === false
+  const needsPip = agentRequiresPip(agent, platform) && pipReady === false
 
   return (
     <div
@@ -963,6 +1163,26 @@ function AgentRow({ agent, state, platform, ui, isDefault, onInstall, onRecheck,
               setup needed
             </span>
           )}
+          {needsWSL && !isInstalled && (
+            <span style={{ fontSize: 9, color: ui.warning, background: `${ui.warning}18`, padding: '1px 5px', borderRadius: 3, fontWeight: 500 }}>
+              {wslMissing ? 'requires WSL' : 'needs Ubuntu'}
+            </span>
+          )}
+          {needsWslNetwork && !isInstalled && (
+            <span style={{ fontSize: 9, color: ui.warning, background: `${ui.warning}18`, padding: '1px 5px', borderRadius: 3, fontWeight: 500 }}>
+              needs WSL network
+            </span>
+          )}
+          {needsNpm && !isInstalled && (
+            <span style={{ fontSize: 9, color: ui.warning, background: `${ui.warning}18`, padding: '1px 5px', borderRadius: 3, fontWeight: 500 }}>
+              requires npm
+            </span>
+          )}
+          {needsPip && !isInstalled && (
+            <span style={{ fontSize: 9, color: ui.warning, background: `${ui.warning}18`, padding: '1px 5px', borderRadius: 3, fontWeight: 500 }}>
+              requires pip
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 10, color: ui.textDim, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {agent.description}
@@ -970,7 +1190,7 @@ function AgentRow({ agent, state, platform, ui, isDefault, onInstall, onRecheck,
       </div>
 
       {/* Actions */}
-      <div style={{ display: 'flex', gap: 3, flexShrink: 0, opacity: hovered ? 1 : (state.status === 'missing' || needsSetup ? 0.6 : 0), transition: 'opacity 0.15s' }}>
+      <div style={{ display: 'flex', gap: 3, flexShrink: 0, opacity: hovered ? 1 : (state.status === 'missing' || needsSetup || needsWSL || needsWslNetwork || needsNpm || needsPip ? 0.6 : 0), transition: 'opacity 0.15s' }}>
         {agent.isBuiltinLlm ? (
           <>
             {isInstalled ? (
@@ -1005,6 +1225,15 @@ function AgentRow({ agent, state, platform, ui, isDefault, onInstall, onRecheck,
               <SmallBtn label="Set Default" ui={ui} onClick={onSetDefault} title="Set as default agent" />
             )}
             <SmallBtn label="↺" ui={ui} onClick={onRecheck} title="Re-check version and config" />
+          </>
+        ) : state.status === 'missing' && needsWSL && wslMissing ? (
+          <SmallBtn label="Install WSL" accent ui={ui} onClick={() => window.api.openExternal('https://learn.microsoft.com/en-us/windows/wsl/install')} title="WSL2 is required — click to learn how to install it" />
+        ) : state.status === 'missing' && (needsWSL || needsWslNetwork) ? (
+          <SmallBtn label="Fix prerequisites" accent ui={ui} onClick={onFixWslPrereqs} title="Install Ubuntu and repair WSL networking (NAT + DNS tunneling), then retry install" />
+        ) : state.status === 'missing' && (needsNpm || needsPip) ? (
+          <>
+            {needsNpm && <SmallBtn label="Install npm" accent ui={ui} onClick={() => { setState({ libraryFilter: 'Runtimes' }); toggleSidePanel('libraries') }} title="Open Libraries to install Node.js (includes npm)" />}
+            {needsPip && <SmallBtn label="Install pip" accent ui={ui} onClick={() => { setState({ libraryFilter: 'Runtimes' }); toggleSidePanel('libraries') }} title="Open Libraries to install Python (includes pip)" />}
           </>
         ) : state.status === 'missing' && hasInstallCmd ? (
           <SmallBtn label="Install" accent ui={ui} onClick={onInstall} />

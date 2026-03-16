@@ -567,13 +567,27 @@ export default function TerminalView({ sessionId, isActive }: Props) {
 
   // ── Reactive option updates ──────────────────────────────────────────────
   useEffect(() => {
-    if (xtermRef.current) {
-      xtermRef.current.options.theme = buildXtermTheme(theme)
-      xtermRef.current.options.fontSize = (theme.id === 'fallout' || theme.id === 'amber-crt') ? Math.max(settings.fontSize, 18) : settings.fontSize
-      xtermRef.current.options.fontFamily = theme.id === 'commodore64' ? "'Commodore 64', monospace" : (theme.id === 'fallout' || theme.id === 'amber-crt') ? "'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace" : theme.id === 'windows98' ? "'W95FA', 'Fixedsys', 'Consolas', monospace" : settings.fontFamily
-      xtermRef.current.options.letterSpacing = theme.id === 'windows98' ? -4 : 0
-      xtermRef.current.options.lineHeight = theme.id === 'commodore64' ? 1.4 : 1
-      setTimeout(() => fitAddonRef.current?.fit(), 10)
+    if (!xtermRef.current) return
+    const term = xtermRef.current
+    term.options.theme = buildXtermTheme(theme)
+    term.options.fontSize = (theme.id === 'fallout' || theme.id === 'amber-crt') ? Math.max(settings.fontSize, 18) : settings.fontSize
+    term.options.fontFamily = theme.id === 'commodore64' ? "'Commodore 64', monospace" : (theme.id === 'fallout' || theme.id === 'amber-crt') ? "'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace" : theme.id === 'windows98' ? "'W95FA', 'Fixedsys', 'Consolas', monospace" : settings.fontFamily
+    term.options.letterSpacing = theme.id === 'windows98' ? -4 : 0
+    term.options.lineHeight = theme.id === 'commodore64' ? 1.4 : 1
+    const fit = () => fitAddonRef.current?.fit()
+    if (theme.id === 'windows98') {
+      // Clear cached glyph atlas so WebGL/Canvas redraws with correct font metrics.
+      // Fixes wrong spacing on first load; switching themes was a workaround.
+      term.clearTextureAtlas()
+      document.fonts.load("11px W95FA").then(() => {
+        fit()
+        setTimeout(fit, 50)
+      }).catch(() => {
+        fit()
+        setTimeout(fit, 50)
+      })
+    } else {
+      setTimeout(fit, 10)
     }
   }, [theme])
 

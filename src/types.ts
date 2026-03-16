@@ -135,6 +135,13 @@ export interface SessionLog {
   shell: string
 }
 
+export interface LibraryToolVersion {
+  label: string
+  checkCmd: string
+  checkCmdFallbacks?: string[]
+  installCmds: { win?: string; mac?: string; linux?: string }
+}
+
 export interface LibraryTool {
   id: string
   name: string
@@ -147,6 +154,10 @@ export interface LibraryTool {
   /** platform-aware install commands */
   installCmds: { win?: string; mac?: string; linux?: string }
   homepage?: string
+  /** Only show this tool on these platforms. If absent, show on all platforms. */
+  platforms?: ('win' | 'mac' | 'linux')[]
+  /** Optional pinned versions that can be installed alongside the default */
+  versions?: LibraryToolVersion[]
 }
 
 export type SshHostOs = 'linux' | 'ubuntu' | 'debian' | 'centos' | 'fedora' | 'alpine' | 'arch' | 'macos' | 'freebsd' | 'windows' | 'redhat' | 'raspberrypi'

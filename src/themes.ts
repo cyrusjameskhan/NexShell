@@ -1120,7 +1120,7 @@ export const themes: TerminalTheme[] = [
       globalCss: `
         .dos-font, .dos-font * {
           font-family: 'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
-          font-size: 18px !important;
+          font-size: 15px !important;
           line-height: 1.3 !important;
           -webkit-font-smoothing: none !important;
           font-smooth: never !important;
@@ -1128,7 +1128,7 @@ export const themes: TerminalTheme[] = [
         }
         .dos-font input, .dos-font button, .dos-font select, .dos-font textarea {
           font-family: 'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
-          font-size: 18px !important;
+          font-size: 15px !important;
         }
         .dos-font svg, .dos-font svg * {
           font-family: inherit !important;
@@ -1186,6 +1186,89 @@ export const themes: TerminalTheme[] = [
     },
   },
   {
+    id: '2077',
+    name: '2077',
+    category: 'extra',
+    effects: {
+      scanlines: true,
+      scanlineOpacity: 0.14,
+      filmGrain: true,
+      filmGrainOpacity: 0.14,
+      vhsTearing: true,
+      crtGlow: true,
+      crtGlowColor: '#ff0000',
+      crtGlowIntensity: 0.4,
+      flicker: true,
+      flickerIntensity: 0.04,
+      globalCss: `
+        .dos-font, .dos-font * {
+          font-family: 'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
+          font-size: 15px !important;
+          line-height: 1.3 !important;
+          -webkit-font-smoothing: none !important;
+          font-smooth: never !important;
+          letter-spacing: 0 !important;
+        }
+        .dos-font input, .dos-font button, .dos-font select, .dos-font textarea {
+          font-family: 'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
+          font-size: 15px !important;
+        }
+        .dos-font svg, .dos-font svg * {
+          font-family: inherit !important;
+          font-size: inherit !important;
+        }
+      `,
+    },
+    colors: {
+      background: '#180000',
+      foreground: '#ff3333',
+      cursor: '#ff0000',
+      cursorAccent: '#180000',
+      selectionBackground: '#4a0000',
+      black: '#250000',
+      red: '#ff0000',
+      green: '#ff5500',
+      yellow: '#ff8800',
+      blue: '#ffcc00',
+      magenta: '#ff5500',
+      cyan: '#ffaa00',
+      white: '#ffaaaa',
+      brightBlack: '#3f0000',
+      brightRed: '#ff4444',
+      brightGreen: '#ff6633',
+      brightYellow: '#ffaa33',
+      brightBlue: '#ffe066',
+      brightMagenta: '#ff7744',
+      brightCyan: '#ffcc44',
+      brightWhite: '#ffcccc',
+    },
+    ui: {
+      bg: '#180000',
+      bgSecondary: '#220000',
+      bgTertiary: '#2e0000',
+      border: '#4a0000',
+      text: '#ff3333',
+      textMuted: '#aa1111',
+      textDim: '#660000',
+      accent: '#ffe600',
+      accentHover: '#ffcc00',
+      accentMuted: '#2a1a00',
+      danger: '#ff0000',
+      success: '#ff5500',
+      warning: '#ff8800',
+      tabActive: '#180000',
+      tabInactive: '#220000',
+      sidebar: '#180000',
+      titlebar: '#180000',
+      inputBg: '#220000',
+      inputBorder: '#4a0000',
+      inputFocus: '#ffe600',
+      scrollbar: '#3f0000',
+      scrollbarHover: '#660000',
+      shadow: 'rgba(255,0,0,0.08)',
+    },
+  },
+  {
     id: 'amber-crt',
     name: 'Amber CRT',
     category: 'extra',
@@ -1203,7 +1286,7 @@ export const themes: TerminalTheme[] = [
       globalCss: `
         .dos-font, .dos-font * {
           font-family: 'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
-          font-size: 18px !important;
+          font-size: 15px !important;
           line-height: 1.3 !important;
           -webkit-font-smoothing: none !important;
           font-smooth: never !important;
@@ -1211,7 +1294,7 @@ export const themes: TerminalTheme[] = [
         }
         .dos-font input, .dos-font button, .dos-font select, .dos-font textarea {
           font-family: 'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
-          font-size: 18px !important;
+          font-size: 15px !important;
         }
         .dos-font svg, .dos-font svg * {
           font-family: inherit !important;

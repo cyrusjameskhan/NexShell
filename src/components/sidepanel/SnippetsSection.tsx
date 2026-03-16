@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useStore } from '../../hooks'
 import { getState, setState } from '../../store'
 import { Snippet } from '../../types'
@@ -13,6 +13,7 @@ export default function SnippetsSection() {
 
   const [snippets, setSnippetsState] = useState<Snippet[]>([])
   const [search, setSearch] = useState('')
+  const [activeTags, setActiveTags] = useState<string[]>([])
   const [isAdding, setIsAdding] = useState(false)
   const [editing, setEditing] = useState<Snippet | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
@@ -31,13 +32,14 @@ export default function SnippetsSection() {
 
   const filtered = snippets.filter(s => {
     const q = search.toLowerCase()
-    if (!q) return true
-    return (
+    const matchesSearch = !q || (
       s.name.toLowerCase().includes(q) ||
       s.command.toLowerCase().includes(q) ||
       (s.description ?? '').toLowerCase().includes(q) ||
       (s.tags ?? []).some(t => t.toLowerCase().includes(q))
     )
+    const matchesTags = activeTags.length === 0 || activeTags.every(t => (s.tags ?? []).includes(t))
+    return matchesSearch && matchesTags
   })
 
   function openAdd() {
@@ -50,12 +52,9 @@ export default function SnippetsSection() {
     setIsAdding(true)
   }
 
-  function saveSnippet(data: { name: string; command: string; description: string; tags: string }) {
+  function saveSnippet(data: { name: string; command: string; description: string; tags: string[] }) {
     const now = Date.now()
-    const tags = data.tags
-      .split(',')
-      .map(t => t.trim())
-      .filter(Boolean)
+    const { tags } = data
 
     if (editing) {
       persist(snippets.map(s =>
@@ -102,13 +101,13 @@ export default function SnippetsSection() {
     })
   }
 
-  const allTags = Array.from(new Set(snippets.flatMap(s => s.tags ?? [])))
+  const allTags = Array.from(new Set(snippets.flatMap(s => s.tags ?? []))).sort()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
 
       {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderBottom: `1px solid ${ui.border}`, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderBottom: allTags.length > 0 ? 'none' : `1px solid ${ui.border}`, flexShrink: 0 }}>
         <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
           <svg style={{ position: 'absolute', left: 7, pointerEvents: 'none', color: ui.textDim }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -136,8 +135,8 @@ export default function SnippetsSection() {
       </div>
 
       {/* Tag filter row */}
-      {allTags.length > 0 && !search && (
-        <TagFilterBar tags={allTags} ui={ui} onSelect={tag => setSearch(tag)} />
+      {allTags.length > 0 && (
+        <TagFilterBar tags={allTags} activeTags={activeTags} ui={ui} onToggle={tag => setActiveTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} onClear={() => setActiveTags([])} />
       )}
 
       {/* Snippet count */}
@@ -151,10 +150,11 @@ export default function SnippetsSection() {
         </div>
       )}
 
+
       {/* Snippet list */}
       <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
         {filtered.length === 0 ? (
-          <EmptyState ui={ui} hasSearch={!!search} onAdd={openAdd} />
+          <EmptyState ui={ui} hasSearch={!!search || activeTags.length > 0} onAdd={openAdd} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {filtered.map(s => (
@@ -163,12 +163,13 @@ export default function SnippetsSection() {
                 snippet={s}
                 ui={ui}
                 copied={copiedId === s.id}
+                activeTags={activeTags}
                 onRun={() => runSnippet(s)}
                 onCopy={() => copySnippet(s)}
                 onEdit={() => openEdit(s)}
                 onDuplicate={() => duplicateSnippet(s)}
                 onDelete={() => setConfirmDelete(s.id)}
-                onTagClick={tag => setSearch(tag)}
+                onTagClick={tag => setActiveTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
               />
             ))}
           </div>
@@ -200,34 +201,55 @@ export default function SnippetsSection() {
 }
 
 // ── Tag Filter Bar ─────────────────────────────────────────────────────────────
-function TagFilterBar({ tags, ui, onSelect }: { tags: string[]; ui: any; onSelect: (tag: string) => void }) {
+function TagFilterBar({ tags, activeTags, ui, onToggle, onClear }: {
+  tags: string[]; activeTags: string[]; ui: any
+  onToggle: (tag: string) => void; onClear: () => void
+}) {
   return (
     <div style={{
-      display: 'flex', gap: 4, padding: '5px 10px', borderBottom: `1px solid ${ui.border}`,
-      flexShrink: 0, flexWrap: 'wrap',
+      display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px 6px',
+      borderBottom: `1px solid ${ui.border}`, flexShrink: 0, flexWrap: 'wrap',
     }}>
-      {tags.map(tag => (
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ color: ui.textDim, flexShrink: 0 }}>
+        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+        <line x1="7" y1="7" x2="7.01" y2="7"/>
+      </svg>
+      {tags.map(tag => {
+        const isActive = activeTags.includes(tag)
+        return (
+          <button
+            key={tag}
+            onClick={() => onToggle(tag)}
+            style={{
+              padding: '2px 7px', fontSize: 10, fontWeight: 500, borderRadius: 3, cursor: 'pointer',
+              background: isActive ? ui.accent : `${ui.accent}18`,
+              color: isActive ? ui.bg : ui.accent,
+              border: `1px solid ${isActive ? ui.accent : 'transparent'}`,
+              transition: 'background 0.12s, color 0.12s',
+            }}
+          >
+            {tag}
+          </button>
+        )
+      })}
+      {activeTags.length > 0 && (
         <button
-          key={tag}
-          onClick={() => onSelect(tag)}
-          style={{
-            padding: '2px 7px', fontSize: 10, borderRadius: 10,
-            background: `${ui.accent}18`, border: `1px solid ${ui.accent}33`,
-            color: ui.accent, cursor: 'pointer', transition: 'background 0.1s, color 0.1s, border-color 0.1s',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = `${ui.accent}30` }}
-          onMouseLeave={e => { e.currentTarget.style.background = `${ui.accent}18` }}
+          onClick={onClear}
+          title="Clear tag filters"
+          style={{ padding: '2px 6px', fontSize: 10, borderRadius: 3, cursor: 'pointer', background: 'transparent', border: `1px solid ${ui.border}`, color: ui.textDim, marginLeft: 2 }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = ui.danger; (e.currentTarget as HTMLButtonElement).style.color = ui.danger }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = ui.border; (e.currentTarget as HTMLButtonElement).style.color = ui.textDim }}
         >
-          {tag}
+          ✕ clear
         </button>
-      ))}
+      )}
     </div>
   )
 }
 
 // ── Snippet Row ────────────────────────────────────────────────────────────────
-function SnippetRow({ snippet, ui, copied, onRun, onCopy, onEdit, onDuplicate, onDelete, onTagClick }: {
-  snippet: Snippet; ui: any; copied: boolean
+function SnippetRow({ snippet, ui, copied, activeTags, onRun, onCopy, onEdit, onDuplicate, onDelete, onTagClick }: {
+  snippet: Snippet; ui: any; copied: boolean; activeTags: string[]
   onRun: () => void; onCopy: () => void; onEdit: () => void
   onDuplicate: () => void; onDelete: () => void; onTagClick: (tag: string) => void
 }) {
@@ -321,21 +343,25 @@ function SnippetRow({ snippet, ui, copied, onRun, onCopy, onEdit, onDuplicate, o
           </div>
           {(snippet.tags ?? []).length > 0 && (
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              {(snippet.tags ?? []).map(tag => (
-                <button
-                  key={tag}
-                  onClick={() => onTagClick(tag)}
-                  style={{
-                    padding: '1px 6px', fontSize: 10, borderRadius: 10,
-                    background: `${ui.accent}18`, border: `1px solid ${ui.accent}33`,
-                    color: ui.accent, cursor: 'pointer',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = `${ui.accent}30` }}
-                  onMouseLeave={e => { e.currentTarget.style.background = `${ui.accent}18` }}
-                >
-                  {tag}
-                </button>
-              ))}
+              {(snippet.tags ?? []).map(tag => {
+                const isActive = activeTags.includes(tag)
+                return (
+                  <button
+                    key={tag}
+                    onClick={() => onTagClick(tag)}
+                    title={isActive ? 'Remove filter' : 'Filter by tag'}
+                    style={{
+                      padding: '1px 6px', fontSize: 10, fontWeight: 500, borderRadius: 3, cursor: 'pointer',
+                      background: isActive ? ui.accent : `${ui.accent}18`,
+                      color: isActive ? ui.bg : ui.accent,
+                      border: `1px solid ${isActive ? ui.accent : 'transparent'}`,
+                      transition: 'background 0.12s, color 0.12s',
+                    }}
+                  >
+                    {tag}
+                  </button>
+                )
+              })}
             </div>
           )}
           <div style={{ fontSize: 10, color: ui.textDim, opacity: 0.6 }}>
@@ -350,13 +376,13 @@ function SnippetRow({ snippet, ui, copied, onRun, onCopy, onEdit, onDuplicate, o
 // ── Snippet Form ───────────────────────────────────────────────────────────────
 function SnippetForm({ editing, ui, existingNames, onSave, onCancel }: {
   editing: Snippet | null; ui: any; existingNames: string[]
-  onSave: (data: { name: string; command: string; description: string; tags: string }) => void
+  onSave: (data: { name: string; command: string; description: string; tags: string[] }) => void
   onCancel: () => void
 }) {
   const [name, setName] = useState(editing?.name ?? '')
   const [command, setCommand] = useState(editing?.command ?? '')
   const [description, setDescription] = useState(editing?.description ?? '')
-  const [tags, setTags] = useState((editing?.tags ?? []).join(', '))
+  const [tags, setTags] = useState<string[]>(editing?.tags ?? [])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const trimmedName = name.trim()
@@ -449,19 +475,7 @@ function SnippetForm({ editing, ui, existingNames, onSave, onCancel }: {
         {/* Tags */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <label style={{ fontSize: 10, fontWeight: 500, color: ui.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tags</label>
-          <input
-            placeholder="git, deploy, docker"
-            value={tags}
-            onChange={e => setTags(e.target.value)}
-            style={{
-              width: '100%', padding: '5px 8px', fontSize: 12,
-              background: ui.inputBg, border: `1px solid ${ui.inputBorder}`,
-              borderRadius: 5, color: ui.text, outline: 'none',
-            }}
-            onFocus={e => (e.currentTarget.style.borderColor = ui.inputFocus)}
-            onBlur={e => (e.currentTarget.style.borderColor = ui.inputBorder)}
-          />
-          <span style={{ fontSize: 10, color: ui.textDim }}>Comma-separated</span>
+          <TagInput tags={tags} onChange={setTags} ui={ui} />
         </div>
       </div>
 
@@ -545,6 +559,68 @@ function EmptyState({ ui, hasSearch, onAdd }: { ui: any; hasSearch: boolean; onA
           </button>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Tag chip input ────────────────────────────────────────────────────────────
+function TagInput({ tags, onChange, ui }: { tags: string[]; onChange: (tags: string[]) => void; ui: any }) {
+  const [input, setInput] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function addTag(raw: string) {
+    const parts = raw.split(',').map(t => t.trim()).filter(Boolean)
+    if (parts.length === 0) return
+    onChange(Array.from(new Set([...tags, ...parts])))
+    setInput('')
+  }
+
+  function removeTag(tag: string) {
+    onChange(tags.filter(t => t !== tag))
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault()
+      addTag(input)
+    } else if (e.key === 'Backspace' && input === '' && tags.length > 0) {
+      removeTag(tags[tags.length - 1])
+    }
+  }
+
+  return (
+    <div
+      onClick={() => inputRef.current?.focus()}
+      style={{
+        display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center',
+        padding: '4px 6px', minHeight: 32,
+        background: ui.inputBg, border: `1px solid ${ui.inputBorder}`, borderRadius: 5,
+        cursor: 'text',
+      }}
+    >
+      {tags.map(tag => (
+        <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px 1px 7px', borderRadius: 3, background: `${ui.accent}22`, color: ui.accent, fontSize: 10, fontWeight: 500 }}>
+          {tag}
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); removeTag(tag) }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', cursor: 'pointer', color: ui.accent, padding: 0, opacity: 0.7, lineHeight: 1 }}
+            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+            onMouseLeave={e => (e.currentTarget.style.opacity = '0.7')}
+          >
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+          </button>
+        </span>
+      ))}
+      <input
+        ref={inputRef}
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={() => { if (input.trim()) addTag(input) }}
+        placeholder={tags.length === 0 ? 'Add tags (Enter or comma)...' : ''}
+        style={{ flex: 1, minWidth: 80, background: 'transparent', border: 'none', outline: 'none', fontSize: 12, color: ui.text, padding: '1px 2px' }}
+      />
     </div>
   )
 }

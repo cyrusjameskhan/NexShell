@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useStore } from '../../hooks'
 import { createTab, setState, setActiveTab, getState, renameSession, registerSshConnection } from '../../store'
 import { SshHost, SshKey, SshHostOs } from '../../types'
@@ -37,6 +37,7 @@ export default function HostsSection() {
   const [hosts, setHostsState] = useState<SshHost[]>([])
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [search, setSearch] = useState('')
+  const [activeTags, setActiveTags] = useState<string[]>([])
   const [editing, setEditing] = useState<SshHost | null>(null)
   const [isAdding, setIsAdding] = useState(false)
   const [form, setForm] = useState<Omit<SshHost, 'id'>>(EMPTY_FORM)
@@ -158,9 +159,13 @@ export default function HostsSection() {
     window.api.setHosts(updated)
   }, [])
 
+  const allTags = Array.from(new Set(hosts.flatMap(h => h.tags || []))).sort()
+
   const filtered = hosts.filter(h => {
     const q = search.toLowerCase()
-    return !q || h.label.toLowerCase().includes(q) || h.host.toLowerCase().includes(q) || h.user.toLowerCase().includes(q) || (h.tags || []).some(t => t.toLowerCase().includes(q))
+    const matchesSearch = !q || h.label.toLowerCase().includes(q) || h.host.toLowerCase().includes(q) || h.user.toLowerCase().includes(q) || (h.tags || []).some(t => t.toLowerCase().includes(q))
+    const matchesTags = activeTags.length === 0 || activeTags.every(t => (h.tags || []).includes(t))
+    return matchesSearch && matchesTags
   })
 
   function openAdd() { setForm(EMPTY_FORM); setEditing(null); setIsAdding(true) }
@@ -533,7 +538,7 @@ export default function HostsSection() {
       {/* Hosts tab content */}
       {activeTab === 'hosts' && <>
         {/* Toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderBottom: `1px solid ${ui.border}`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderBottom: allTags.length > 0 ? 'none' : `1px solid ${ui.border}`, flexShrink: 0 }}>
           <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
             <svg style={{ position: 'absolute', left: 7, pointerEvents: 'none', color: ui.textDim }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -573,6 +578,45 @@ export default function HostsSection() {
             Add
           </button>
         </div>
+
+        {/* Tag filter bar */}
+        {allTags.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px 6px', borderBottom: `1px solid ${ui.border}`, flexShrink: 0, flexWrap: 'wrap' }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ color: ui.textDim, flexShrink: 0 }}>
+              <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+              <line x1="7" y1="7" x2="7.01" y2="7"/>
+            </svg>
+            {allTags.map(tag => {
+              const isActive = activeTags.includes(tag)
+              return (
+                <button
+                  key={tag}
+                  onClick={() => setActiveTags(prev => isActive ? prev.filter(t => t !== tag) : [...prev, tag])}
+                  style={{
+                    padding: '2px 7px', fontSize: 10, fontWeight: 500, borderRadius: 3, cursor: 'pointer',
+                    background: isActive ? ui.accent : `${ui.accent}18`,
+                    color: isActive ? ui.bg : ui.accent,
+                    border: `1px solid ${isActive ? ui.accent : 'transparent'}`,
+                    transition: 'background 0.12s, color 0.12s',
+                  }}
+                >
+                  {tag}
+                </button>
+              )
+            })}
+            {activeTags.length > 0 && (
+              <button
+                onClick={() => setActiveTags([])}
+                title="Clear tag filters"
+                style={{ padding: '2px 6px', fontSize: 10, borderRadius: 3, cursor: 'pointer', background: 'transparent', border: `1px solid ${ui.border}`, color: ui.textDim, marginLeft: 2 }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = ui.danger; (e.currentTarget as HTMLButtonElement).style.color = ui.danger }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = ui.border; (e.currentTarget as HTMLButtonElement).style.color = ui.textDim }}
+              >
+                ✕ clear
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Host list */}
         <div style={{ flex: 1, overflow: 'auto', padding: 10 }}>
@@ -940,7 +984,7 @@ function HostCard({ host, ui, onConnect, onEdit, onDelete }: { host: SshHost; ui
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
         {host.detectedOs && <Tag label={osLabel(host.detectedOs)} ui={ui} />}
         {host.port !== 22 && <Tag label={`:${host.port}`} ui={ui} />}
-        {(host.tags || []).slice(0, 2).map(t => <Tag key={t} label={t} ui={ui} />)}
+        {(host.tags || []).map(t => <Tag key={t} label={t} ui={ui} />)}
         {host.password && <Tag label="pw" ui={ui} />}
         {host.identityFile && <Tag label="key" ui={ui} />}
       </div>
@@ -966,7 +1010,7 @@ function HostRow({ host, ui, onConnect, onEdit, onDelete }: { host: SshHost; ui:
         <div style={{ fontSize: 10, color: ui.textDim }}>{host.user}@{host.host}{host.port !== 22 ? `:${host.port}` : ''}</div>
       </div>
       <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-        {(host.tags || []).slice(0, 2).map(t => <Tag key={t} label={t} ui={ui} />)}
+        {(host.tags || []).map(t => <Tag key={t} label={t} ui={ui} />)}
         {host.password && <Tag label="pw" ui={ui} />}
       </div>
       <div style={{ display: 'flex', gap: 3, flexShrink: 0, opacity: hovered ? 1 : 0, transition: 'opacity 0.15s', alignItems: 'center' }}>
@@ -1122,7 +1166,7 @@ function HostForm({ form, setForm, editing, ui, keys, onSave, onCancel }: {
         </div>
       </FormRow>
       <FormRow label="Tags" ui={ui}>
-        <FormInput placeholder="prod, web (comma separated)" value={(form.tags || []).join(', ')} onChange={v => f('tags', v.split(',').map(t => t.trim()).filter(Boolean))} ui={ui} />
+        <TagInput tags={form.tags || []} onChange={tags => f('tags', tags)} ui={ui} />
       </FormRow>
       <FormRow label="Notes" ui={ui}>
         <textarea
@@ -1182,6 +1226,70 @@ function EmptyState({ ui, hasSearch }: { ui: any; hasSearch: boolean }) {
       <div style={{ fontSize: 11, color: ui.textDim, lineHeight: 1.5, maxWidth: 180 }}>
         {hasSearch ? 'Try a different search term.' : 'Add a host to quickly connect to remote servers.'}
       </div>
+    </div>
+  )
+}
+
+// ── Tag chip input ────────────────────────────────────────────────────────────
+function TagInput({ tags, onChange, ui }: { tags: string[]; onChange: (tags: string[]) => void; ui: any }) {
+  const [input, setInput] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function addTag(raw: string) {
+    const parts = raw.split(',').map(t => t.trim()).filter(Boolean)
+    if (parts.length === 0) return
+    const next = Array.from(new Set([...tags, ...parts]))
+    onChange(next)
+    setInput('')
+  }
+
+  function removeTag(tag: string) {
+    onChange(tags.filter(t => t !== tag))
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault()
+      addTag(input)
+    } else if (e.key === 'Backspace' && input === '' && tags.length > 0) {
+      removeTag(tags[tags.length - 1])
+    }
+  }
+
+  return (
+    <div
+      onClick={() => inputRef.current?.focus()}
+      style={{
+        display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center',
+        padding: '4px 6px', minHeight: 32,
+        background: ui.inputBg, border: `1px solid ${ui.inputBorder}`, borderRadius: 5,
+        cursor: 'text',
+      }}
+      onFocus={() => { const el = document.activeElement as HTMLElement; if (el) el.style.setProperty('border-color', ui.inputFocus) }}
+    >
+      {tags.map(tag => (
+        <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px 1px 7px', borderRadius: 3, background: `${ui.accent}22`, color: ui.accent, fontSize: 10, fontWeight: 500 }}>
+          {tag}
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); removeTag(tag) }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', cursor: 'pointer', color: ui.accent, padding: 0, opacity: 0.7, lineHeight: 1 }}
+            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+            onMouseLeave={e => (e.currentTarget.style.opacity = '0.7')}
+          >
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+          </button>
+        </span>
+      ))}
+      <input
+        ref={inputRef}
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={() => { if (input.trim()) addTag(input) }}
+        placeholder={tags.length === 0 ? 'Add tags (Enter or comma)...' : ''}
+        style={{ flex: 1, minWidth: 80, background: 'transparent', border: 'none', outline: 'none', fontSize: 12, color: ui.text, padding: '1px 2px' }}
+      />
     </div>
   )
 }
