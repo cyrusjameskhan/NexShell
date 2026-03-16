@@ -11,10 +11,27 @@ export default function SettingsPanel() {
   const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'ai'>('general')
   const [themeSearch, setThemeSearch] = useState('')
   const [scalePreview, setScalePreview] = useState<number | null>(null)
+  const [updateCheckStatus, setUpdateCheckStatus] = useState<'idle' | 'checking' | 'latest' | 'error'>('idle')
+  const [updateCheckError, setUpdateCheckError] = useState<string | null>(null)
 
   useEffect(() => {
     setLocalSettings(settings)
   }, [settings])
+
+  useEffect(() => {
+    const unsubNotAvail = window.api.onUpdateNotAvailable(() => {
+      setUpdateCheckStatus('latest')
+      setUpdateCheckError(null)
+    })
+    const unsubErr = window.api.onUpdateError((msg) => {
+      setUpdateCheckStatus('error')
+      setUpdateCheckError(msg)
+    })
+    return () => {
+      unsubNotAvail()
+      unsubErr()
+    }
+  }, [])
 
   if (!settingsOpen) return null
 
@@ -221,6 +238,38 @@ export default function SettingsPanel() {
                   }}
                   ui={ui}
                 />
+              </SettingRow>
+
+              <SettingRow label="Updates" ui={ui}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    onClick={async () => {
+                      setUpdateCheckStatus('checking')
+                      setUpdateCheckError(null)
+                      await window.api.updateCheck()
+                    }}
+                    disabled={updateCheckStatus === 'checking'}
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: 12,
+                      background: ui.bgTertiary,
+                      border: `1px solid ${ui.border}`,
+                      borderRadius: 6,
+                      color: ui.text,
+                      cursor: updateCheckStatus === 'checking' ? 'wait' : 'pointer',
+                    }}
+                  >
+                    {updateCheckStatus === 'checking' ? 'Checking...' : 'Check for updates'}
+                  </button>
+                  {updateCheckStatus === 'latest' && (
+                    <span style={{ fontSize: 11, color: ui.success }}>You're on the latest version</span>
+                  )}
+                  {updateCheckStatus === 'error' && updateCheckError && (
+                    <span style={{ fontSize: 11, color: ui.danger }} title={updateCheckError}>
+                      {updateCheckError.length > 40 ? updateCheckError.slice(0, 40) + '…' : updateCheckError}
+                    </span>
+                  )}
+                </div>
               </SettingRow>
 
               <SettingRow label="UI Scale" ui={ui}>

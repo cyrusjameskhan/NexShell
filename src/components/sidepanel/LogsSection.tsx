@@ -6,7 +6,7 @@ export default function LogsSection() {
   const { theme } = useStore()
   const ui = theme.ui
 
-  const [logs, setLogs] = useState<SessionLog[]>([])
+  const [logs, setLogs] = useState<SessionLog[] | null>(null)
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<SessionLog | null>(null)
   const [clearing, setClearing] = useState(false)
@@ -15,7 +15,7 @@ export default function LogsSection() {
 
   const loadLogs = async () => {
     const all = await window.api.getLogs()
-    setLogs(all.slice().reverse())
+    setLogs((all ?? []).slice().reverse())
   }
 
   useEffect(() => {
@@ -42,12 +42,12 @@ export default function LogsSection() {
   }
 
   const filtered = search.trim()
-    ? logs.filter(l =>
+    ? (logs ?? []).filter(l =>
         l.sessionName.toLowerCase().includes(search.toLowerCase()) ||
         l.shell.toLowerCase().includes(search.toLowerCase()) ||
         l.outputTail.toLowerCase().includes(search.toLowerCase())
       )
-    : logs
+    : (logs ?? [])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -65,7 +65,7 @@ export default function LogsSection() {
         </span>
         <button
           onClick={() => setConfirmOpen(true)}
-          disabled={logs.length === 0 || clearing}
+          disabled={(logs ?? []).length === 0 || clearing}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -76,8 +76,8 @@ export default function LogsSection() {
             border: `1px solid ${ui.danger}33`,
             borderRadius: 4,
             color: ui.danger,
-            cursor: logs.length === 0 || clearing ? 'not-allowed' : 'pointer',
-            opacity: logs.length === 0 || clearing ? 0.4 : 1,
+            cursor: (logs ?? []).length === 0 || clearing ? 'not-allowed' : 'pointer',
+            opacity: (logs ?? []).length === 0 || clearing ? 0.4 : 1,
             transition: 'opacity 0.15s',
           }}
         >
@@ -97,7 +97,7 @@ export default function LogsSection() {
       ) : (
         <>
           {/* Search bar */}
-          {logs.length > 0 && (
+          {(logs ?? []).length > 0 && (
             <div style={{ padding: '8px 10px', borderBottom: `1px solid ${ui.border}`, flexShrink: 0 }}>
               <div style={{ position: 'relative' }}>
                 <svg
@@ -142,7 +142,7 @@ export default function LogsSection() {
 
           {/* Log list */}
           <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-            {filtered.length === 0 ? (
+            {logs !== null && filtered.length === 0 ? (
               <EmptyState
                 ui={ui}
                 icon={
@@ -175,7 +175,7 @@ export default function LogsSection() {
               color: ui.textDim,
               flexShrink: 0,
             }}>
-              {search ? `${filtered.length} of ${logs.length}` : logs.length} session{logs.length !== 1 ? 's' : ''}
+              {search ? `${filtered.length} of ${(logs ?? []).length}` : (logs ?? []).length} session{(logs ?? []).length !== 1 ? 's' : ''}
             </div>
           )}
         </>
@@ -183,7 +183,7 @@ export default function LogsSection() {
       {confirmOpen && (
         <ConfirmModal
           ui={ui}
-          count={logs.length}
+          count={(logs ?? []).length}
           onConfirm={handleClear}
           onCancel={() => setConfirmOpen(false)}
         />

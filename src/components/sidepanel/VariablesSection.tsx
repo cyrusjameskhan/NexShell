@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useStore } from '../../hooks'
 import { EnvVariable } from '../../types'
@@ -11,7 +11,7 @@ export default function VariablesSection() {
   const { theme } = useStore()
   const ui = theme.ui
 
-  const [vars, setVarsState] = useState<EnvVariable[]>([])
+  const [vars, setVarsState] = useState<EnvVariable[] | null>(null)
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<EnvVariable | null>(null)
   const [isAdding, setIsAdding] = useState(false)
@@ -23,7 +23,7 @@ export default function VariablesSection() {
 
   useEffect(() => {
     window.api.getVariables().then(loaded => {
-      if (loaded?.length) setVarsState(loaded)
+      setVarsState(loaded ?? [])
     })
   }, [])
 
@@ -32,12 +32,12 @@ export default function VariablesSection() {
     window.api.setVariables(updated)
   }, [])
 
-  const filtered = vars.filter(v => {
+  const filtered = (vars ?? []).filter(v => {
     const q = search.toLowerCase()
     return !q || v.key.toLowerCase().includes(q) || v.value.toLowerCase().includes(q)
   })
 
-  const enabledCount = vars.filter(v => v.enabled).length
+  const enabledCount = (vars ?? []).filter(v => v.enabled).length
 
   function openAdd() {
     setFormKey(''); setFormValue(''); setFormSecret(false)
@@ -53,23 +53,23 @@ export default function VariablesSection() {
     const key = formKey.trim()
     if (!key) return
     if (editing) {
-      persist(vars.map(v => v.id === editing.id ? { ...v, key, value: formValue, secret: formSecret } : v))
+      persist((vars ?? []).map(v => v.id === editing.id ? { ...v, key, value: formValue, secret: formSecret } : v))
     } else {
-      persist([...vars, { id: uid(), key, value: formValue, enabled: true, secret: formSecret }])
+      persist([...(vars ?? []), { id: uid(), key, value: formValue, enabled: true, secret: formSecret }])
     }
     setIsAdding(false); setEditing(null)
   }
 
   function deleteVar(id: string) {
-    persist(vars.filter(v => v.id !== id)); setConfirmDelete(null)
+    persist((vars ?? []).filter(v => v.id !== id)); setConfirmDelete(null)
   }
 
   function toggleEnabled(id: string) {
-    persist(vars.map(v => v.id === id ? { ...v, enabled: !v.enabled } : v))
+    persist((vars ?? []).map(v => v.id === id ? { ...v, enabled: !v.enabled } : v))
   }
 
   function toggleAll(enabled: boolean) {
-    persist(vars.map(v => ({ ...v, enabled })))
+    persist((vars ?? []).map(v => ({ ...v, enabled })))
   }
 
   function parseAndImport(text: string) {
@@ -87,15 +87,15 @@ export default function VariablesSection() {
         value = value.slice(1, -1)
       }
       if (!key) continue
-      if (vars.some(v => v.key === key) || newVars.some(v => v.key === key)) continue
+      if ((vars ?? []).some(v => v.key === key) || newVars.some(v => v.key === key)) continue
       newVars.push({ id: uid(), key, value, enabled: true, secret: false })
     }
-    if (newVars.length > 0) persist([...vars, ...newVars])
+    if (newVars.length > 0) persist([...(vars ?? []), ...newVars])
     setImportText(null)
   }
 
   function duplicateVar(v: EnvVariable) {
-    persist([...vars, { id: uid(), key: `${v.key}_COPY`, value: v.value, enabled: v.enabled, secret: v.secret }])
+    persist([...(vars ?? []), { id: uid(), key: `${v.key}_COPY`, value: v.value, enabled: v.enabled, secret: v.secret }])
   }
 
   return (
@@ -152,14 +152,14 @@ export default function VariablesSection() {
       </div>
 
       {/* Summary bar */}
-      {vars.length > 0 && (
+      {(vars ?? []).length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 12px', borderBottom: `1px solid ${ui.border}`, flexShrink: 0 }}>
           <span style={{ fontSize: 10, color: ui.textDim }}>
-            {enabledCount}/{vars.length} active
+            {enabledCount}/{(vars ?? []).length} active
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => toggleAll(true)}
-              style={{ fontSize: 10, color: ui.accent, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline', opacity: enabledCount === vars.length ? 0.4 : 1 }}>
+              style={{ fontSize: 10, color: ui.accent, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline', opacity: enabledCount === (vars ?? []).length ? 0.4 : 1 }}>
               Enable all
             </button>
             <button onClick={() => toggleAll(false)}
@@ -172,7 +172,7 @@ export default function VariablesSection() {
 
       {/* Variable list */}
       <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
-        {filtered.length === 0 ? (
+        {vars !== null && filtered.length === 0 ? (
           <EmptyState ui={ui} hasSearch={!!search} onAdd={openAdd} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -194,7 +194,7 @@ export default function VariablesSection() {
           formKey={formKey} formValue={formValue} formSecret={formSecret}
           setFormKey={setFormKey} setFormValue={setFormValue} setFormSecret={setFormSecret}
           editing={editing} ui={ui}
-          existingKeys={vars.filter(v => v.id !== editing?.id).map(v => v.key)}
+          existingKeys={(vars ?? []).filter(v => v.id !== editing?.id).map(v => v.key)}
           onSave={saveForm}
           onCancel={() => { setIsAdding(false); setEditing(null) }}
         />
@@ -209,7 +209,7 @@ export default function VariablesSection() {
       {/* Delete confirm */}
       {confirmDelete && (
         <ConfirmDelete ui={ui}
-          varKey={vars.find(v => v.id === confirmDelete)?.key || 'this variable'}
+          varKey={(vars ?? []).find(v => v.id === confirmDelete)?.key || 'this variable'}
           onConfirm={() => deleteVar(confirmDelete)}
           onCancel={() => setConfirmDelete(null)} />
       )}

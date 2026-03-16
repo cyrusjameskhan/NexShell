@@ -287,6 +287,17 @@ declare global {
       installTool: (sessionId: string, cmd: string) => Promise<void>
       checkAgentConfigured: (configPath: string) => Promise<boolean>
       openExternal: (url: string) => Promise<void>
+      updateCheck: () => Promise<void>
+      updateDownload: () => void
+      updateInstall: () => void
+      updateRemindLater: () => Promise<void>
+      updateDontShowAgain: (version: string) => Promise<void>
+      updateDisableChecks: () => Promise<void>
+      updateGetPrefs: () => Promise<{ skipVersion: string | null; disabled: boolean; remindLaterUntil: number }>
+      onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: string }) => void) => () => void
+      onUpdateDownloaded: (callback: () => void) => () => void
+      onUpdateError: (callback: (msg: string) => void) => () => void
+      onUpdateNotAvailable: (callback: () => void) => () => void
       getLogs: () => Promise<SessionLog[]>
       addLog: (log: SessionLog) => Promise<void>
       deleteLog: (id: string) => Promise<void>

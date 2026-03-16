@@ -116,6 +116,35 @@ contextBridge.exposeInMainWorld('api', {
   // Shell
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
 
+  // Updates
+  updateCheck: () => ipcRenderer.invoke('update:check'),
+  updateDownload: () => ipcRenderer.send('update:download'),
+  updateInstall: () => ipcRenderer.send('update:install'),
+  updateRemindLater: () => ipcRenderer.invoke('update:remindLater'),
+  updateDontShowAgain: (version: string) => ipcRenderer.invoke('update:dontShowAgain', version),
+  updateDisableChecks: () => ipcRenderer.invoke('update:disableChecks'),
+  updateGetPrefs: () => ipcRenderer.invoke('update:getPrefs'),
+  onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: string }) => void) => {
+    const handler = (_e: any, info: { version: string; releaseNotes?: string }) => callback(info)
+    ipcRenderer.on('update:available', handler)
+    return () => ipcRenderer.removeListener('update:available', handler)
+  },
+  onUpdateDownloaded: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('update:downloaded', handler)
+    return () => ipcRenderer.removeListener('update:downloaded', handler)
+  },
+  onUpdateError: (callback: (msg: string) => void) => {
+    const handler = (_e: any, msg: string) => callback(msg)
+    ipcRenderer.on('update:error', handler)
+    return () => ipcRenderer.removeListener('update:error', handler)
+  },
+  onUpdateNotAvailable: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('update:not-available', handler)
+    return () => ipcRenderer.removeListener('update:not-available', handler)
+  },
+
   // Session Logs
   getLogs: () => ipcRenderer.invoke('logs:get'),
   addLog: (log: any) => ipcRenderer.invoke('logs:add', log),

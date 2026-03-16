@@ -12,9 +12,10 @@ import TerminalView from './Terminal'
 type DropZonePos = 'left' | 'right' | 'top' | 'bottom' | null
 
 export default function PaneContainer() {
-  const { tabs, activeTabIndex, workspaces, activeSessionId, theme } = useStore()
+  const { tabs, activeTabIndex, workspaces, activeSessionId, theme, initialized } = useStore()
   const ui = theme.ui
 
+  if (!initialized) return null
   if (tabs.length === 0) return <EmptyState ui={ui} termBg={theme.colors.background} showNewSession />
 
   // All tabs render simultaneously at full size. Inactive tabs use

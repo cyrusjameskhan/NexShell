@@ -1,7 +1,9 @@
 import { app, BrowserWindow, ipcMain, nativeTheme, dialog, shell } from 'electron'
 import path from 'path'
 import os from 'os'
+import fs from 'fs'
 import { execFile, execSync } from 'child_process'
+import { autoUpdater } from 'electron-updater'
 
 // Enable GPU compositing optimizations for smoother rendering
 app.commandLine.appendSwitch('enable-gpu-rasterization')
@@ -57,7 +59,10 @@ function createWindow() {
   })
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  createWindow()
+  setupUpdater()
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
@@ -86,6 +91,76 @@ ipcMain.handle('window:setAlwaysOnTop', (_event, flag: boolean) => {
   if (mainWindow) mainWindow.setAlwaysOnTop(flag)
 })
 
+// ── Auto-update ─────────────────────────────────────────────────────────────
+interface UpdatePrefs {
+  skipVersion: string | null
+  disabled: boolean
+  remindLaterUntil: number
+}
+
+const updatePrefsPath = path.join(app.getPath('userData'), 'update-prefs.json')
+
+function loadUpdatePrefs(): UpdatePrefs {
+  try {
+    if (fs.existsSync(updatePrefsPath)) {
+      return JSON.parse(fs.readFileSync(updatePrefsPath, 'utf-8'))
+    }
+  } catch { /* ignore */ }
+  return { skipVersion: null, disabled: false, remindLaterUntil: 0 }
+}
+
+function saveUpdatePrefs(prefs: UpdatePrefs) {
+  fs.writeFileSync(updatePrefsPath, JSON.stringify(prefs, null, 2))
+}
+
+function setupUpdater() {
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = false
+
+  autoUpdater.on('update-available', (info) => {
+    const prefs = loadUpdatePrefs()
+    if (prefs.disabled) return
+    if (prefs.skipVersion === info.version) return
+    if (Date.now() < prefs.remindLaterUntil) return
+    mainWindow?.webContents.send('update:available', { version: info.version, releaseNotes: info.releaseNotes })
+  })
+
+  autoUpdater.on('update-downloaded', () => {
+    mainWindow?.webContents.send('update:downloaded')
+  })
+
+  autoUpdater.on('error', (err) => {
+    console.warn('[updater]', err.message)
+    mainWindow?.webContents.send('update:error', err.message)
+  })
+
+  autoUpdater.on('update-not-available', () => {
+    mainWindow?.webContents.send('update:not-available')
+  })
+
+  // Check 5s after launch (only when packaged)
+  if (!isDev) setTimeout(() => autoUpdater.checkForUpdates(), 5000)
+}
+
+ipcMain.handle('update:check', () => autoUpdater.checkForUpdates())
+ipcMain.on('update:download', () => autoUpdater.downloadUpdate())
+ipcMain.on('update:install', () => autoUpdater.quitAndInstall(false, true))
+ipcMain.handle('update:remindLater', () => {
+  const prefs = loadUpdatePrefs()
+  prefs.remindLaterUntil = Date.now() + 24 * 60 * 60 * 1000 // 24h
+  saveUpdatePrefs(prefs)
+})
+ipcMain.handle('update:dontShowAgain', (_event, version: string) => {
+  const prefs = loadUpdatePrefs()
+  prefs.skipVersion = version
+  saveUpdatePrefs(prefs)
+})
+ipcMain.handle('update:disableChecks', () => {
+  const prefs = loadUpdatePrefs()
+  prefs.disabled = true
+  saveUpdatePrefs(prefs)
+})
+ipcMain.handle('update:getPrefs', () => loadUpdatePrefs())
 
 // ── PTY Management ──
 import * as pty from 'node-pty'

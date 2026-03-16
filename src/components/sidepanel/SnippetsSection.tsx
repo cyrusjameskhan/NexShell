@@ -11,7 +11,7 @@ export default function SnippetsSection() {
   const { theme } = useStore()
   const ui = theme.ui
 
-  const [snippets, setSnippetsState] = useState<Snippet[]>([])
+  const [snippets, setSnippetsState] = useState<Snippet[] | null>(null)
   const [search, setSearch] = useState('')
   const [activeTags, setActiveTags] = useState<string[]>([])
   const [isAdding, setIsAdding] = useState(false)
@@ -21,7 +21,7 @@ export default function SnippetsSection() {
 
   useEffect(() => {
     window.api.getSnippets().then(loaded => {
-      if (loaded?.length) setSnippetsState(loaded)
+      setSnippetsState(loaded ?? [])
     })
   }, [])
 
@@ -30,7 +30,7 @@ export default function SnippetsSection() {
     window.api.setSnippets(updated)
   }, [])
 
-  const filtered = snippets.filter(s => {
+  const filtered = (snippets ?? []).filter(s => {
     const q = search.toLowerCase()
     const matchesSearch = !q || (
       s.name.toLowerCase().includes(q) ||
@@ -57,13 +57,13 @@ export default function SnippetsSection() {
     const { tags } = data
 
     if (editing) {
-      persist(snippets.map(s =>
+      persist((snippets ?? []).map(s =>
         s.id === editing.id
           ? { ...s, name: data.name, command: data.command, description: data.description, tags, updatedAt: now }
           : s
       ))
     } else {
-      persist([...snippets, {
+      persist([...(snippets ?? []), {
         id: uid(),
         name: data.name,
         command: data.command,
@@ -78,13 +78,13 @@ export default function SnippetsSection() {
   }
 
   function deleteSnippet(id: string) {
-    persist(snippets.filter(s => s.id !== id))
+    persist((snippets ?? []).filter(s => s.id !== id))
     setConfirmDelete(null)
   }
 
   function duplicateSnippet(s: Snippet) {
     const now = Date.now()
-    persist([...snippets, { ...s, id: uid(), name: `${s.name} (copy)`, createdAt: now, updatedAt: now }])
+    persist([...(snippets ?? []), { ...s, id: uid(), name: `${s.name} (copy)`, createdAt: now, updatedAt: now }])
   }
 
   function runSnippet(s: Snippet) {
@@ -101,7 +101,7 @@ export default function SnippetsSection() {
     })
   }
 
-  const allTags = Array.from(new Set(snippets.flatMap(s => s.tags ?? []))).sort()
+  const allTags = Array.from(new Set((snippets ?? []).flatMap(s => s.tags ?? []))).sort()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
@@ -140,12 +140,12 @@ export default function SnippetsSection() {
       )}
 
       {/* Snippet count */}
-      {snippets.length > 0 && (
+      {(snippets ?? []).length > 0 && (
         <div style={{ padding: '4px 12px', borderBottom: `1px solid ${ui.border}`, flexShrink: 0 }}>
           <span style={{ fontSize: 10, color: ui.textDim }}>
-            {filtered.length === snippets.length
-              ? `${snippets.length} snippet${snippets.length !== 1 ? 's' : ''}`
-              : `${filtered.length} of ${snippets.length}`}
+            {filtered.length === (snippets ?? []).length
+              ? `${(snippets ?? []).length} snippet${(snippets ?? []).length !== 1 ? 's' : ''}`
+              : `${filtered.length} of ${(snippets ?? []).length}`}
           </span>
         </div>
       )}
@@ -153,7 +153,7 @@ export default function SnippetsSection() {
 
       {/* Snippet list */}
       <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
-        {filtered.length === 0 ? (
+        {snippets !== null && filtered.length === 0 ? (
           <EmptyState ui={ui} hasSearch={!!search || activeTags.length > 0} onAdd={openAdd} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -181,7 +181,7 @@ export default function SnippetsSection() {
         <SnippetForm
           editing={editing}
           ui={ui}
-          existingNames={snippets.filter(s => s.id !== editing?.id).map(s => s.name)}
+          existingNames={(snippets ?? []).filter(s => s.id !== editing?.id).map(s => s.name)}
           onSave={saveSnippet}
           onCancel={() => { setIsAdding(false); setEditing(null) }}
         />
@@ -191,7 +191,7 @@ export default function SnippetsSection() {
       {confirmDelete && (
         <ConfirmDelete
           ui={ui}
-          snippetName={snippets.find(s => s.id === confirmDelete)?.name || 'this snippet'}
+          snippetName={(snippets ?? []).find(s => s.id === confirmDelete)?.name || 'this snippet'}
           onConfirm={() => deleteSnippet(confirmDelete)}
           onCancel={() => setConfirmDelete(null)}
         />

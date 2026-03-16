@@ -34,7 +34,7 @@ export default function HostsSection() {
   const [activeTab, setActiveTabState] = useState<'hosts' | 'keys'>('hosts')
 
   // ── Hosts state ──
-  const [hosts, setHostsState] = useState<SshHost[]>([])
+  const [hosts, setHostsState] = useState<SshHost[] | null>(null)
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [search, setSearch] = useState('')
   const [activeTags, setActiveTags] = useState<string[]>([])
@@ -46,7 +46,7 @@ export default function HostsSection() {
   const unlistenRef = useRef<(() => void) | null>(null)
 
   // ── Keys state ──
-  const [keys, setKeysState] = useState<SshKey[]>([])
+  const [keys, setKeysState] = useState<SshKey[] | null>(null)
   const [keySearch, setKeySearch] = useState('')
   const [editingKey, setEditingKey] = useState<SshKey | null>(null)
   const [isAddingKey, setIsAddingKey] = useState(false)
@@ -59,10 +59,10 @@ export default function HostsSection() {
 
   useEffect(() => {
     window.api.getHosts().then(loaded => {
-      if (loaded?.length) setHostsState(loaded)
+      setHostsState(loaded ?? [])
     })
     window.api.getKeys().then(loaded => {
-      if (loaded?.length) setKeysState(loaded)
+      setKeysState(loaded ?? [])
     })
   }, [])
 
@@ -71,7 +71,7 @@ export default function HostsSection() {
     window.api.setKeys(updated)
   }, [])
 
-  const filteredKeys = keys.filter(k => {
+  const filteredKeys = (keys ?? []).filter(k => {
     const q = keySearch.toLowerCase()
     return !q || k.name.toLowerCase().includes(q) || k.path.toLowerCase().includes(q) || (k.comment ?? '').toLowerCase().includes(q)
   })
@@ -90,15 +90,15 @@ export default function HostsSection() {
     if (!keyForm.path.trim()) return
     const name = keyForm.name.trim() || keyForm.path.split(/[\\/]/).pop() || keyForm.path
     if (editingKey) {
-      persistKeys(keys.map(k => k.id === editingKey.id ? { ...editingKey, name, path: keyForm.path.trim(), comment: keyForm.comment.trim() || undefined } : k))
+      persistKeys((keys ?? []).map(k => k.id === editingKey.id ? { ...editingKey, name, path: keyForm.path.trim(), comment: keyForm.comment.trim() || undefined } : k))
     } else {
-      persistKeys([...keys, { id: uid(), name, path: keyForm.path.trim(), comment: keyForm.comment.trim() || undefined, addedAt: Date.now() }])
+      persistKeys([...(keys ?? []), { id: uid(), name, path: keyForm.path.trim(), comment: keyForm.comment.trim() || undefined, addedAt: Date.now() }])
     }
     setIsAddingKey(false)
     setEditingKey(null)
   }
   function deleteKey(id: string) {
-    persistKeys(keys.filter(k => k.id !== id))
+    persistKeys((keys ?? []).filter(k => k.id !== id))
     setConfirmDeleteKey(null)
   }
   async function browseKeyFile() {
@@ -137,7 +137,7 @@ export default function HostsSection() {
       })
       if (res.success) {
         const keyName = genForm.filename.split(/[\\/]/).pop() || genForm.filename
-        persistKeys([...keys, { id: uid(), name: keyName, path: genForm.filename.trim(), comment: genForm.comment.trim() || undefined, addedAt: Date.now() }])
+        persistKeys([...(keys ?? []), { id: uid(), name: keyName, path: genForm.filename.trim(), comment: genForm.comment.trim() || undefined, addedAt: Date.now() }])
         setGenState('done')
       } else {
         setGenState('error')
@@ -159,9 +159,9 @@ export default function HostsSection() {
     window.api.setHosts(updated)
   }, [])
 
-  const allTags = Array.from(new Set(hosts.flatMap(h => h.tags || []))).sort()
+  const allTags = Array.from(new Set((hosts ?? []).flatMap(h => h.tags || []))).sort()
 
-  const filtered = hosts.filter(h => {
+  const filtered = (hosts ?? []).filter(h => {
     const q = search.toLowerCase()
     const matchesSearch = !q || h.label.toLowerCase().includes(q) || h.host.toLowerCase().includes(q) || h.user.toLowerCase().includes(q) || (h.tags || []).some(t => t.toLowerCase().includes(q))
     const matchesTags = activeTags.length === 0 || activeTags.every(t => (h.tags || []).includes(t))
@@ -176,13 +176,13 @@ export default function HostsSection() {
   function saveForm() {
     if (!form.host.trim() || !form.user.trim()) return
     if (editing) {
-      persist(hosts.map(h => h.id === editing.id ? { ...editing, ...form } : h))
+      persist((hosts ?? []).map(h => h.id === editing.id ? { ...editing, ...form } : h))
     } else {
-      persist([...hosts, { id: uid(), ...form, lastConnected: undefined }])
+      persist([...(hosts ?? []), { id: uid(), ...form, lastConnected: undefined }])
     }
     setIsAdding(false); setEditing(null)
   }
-  function deleteHost(id: string) { persist(hosts.filter(h => h.id !== id)); setConfirmDelete(null) }
+  function deleteHost(id: string) { persist((hosts ?? []).filter(h => h.id !== id)); setConfirmDelete(null) }
 
   function connectHost(host: SshHost) {
     // Clean up any previous listener
@@ -225,7 +225,7 @@ export default function HostsSection() {
         successScheduled = true
         unlisten()
         unlistenRef.current = null
-        persist(hosts.map(h => h.id === host.id ? { ...h, lastConnected: Date.now(), ...(detectedOs ? { detectedOs } : {}) } : h))
+        persist((hosts ?? []).map(h => h.id === host.id ? { ...h, lastConnected: Date.now(), ...(detectedOs ? { detectedOs } : {}) } : h))
         registerSshConnection(session.id, host)
         setConnecting(prev => prev ? { ...prev, phase: 'connected', message: `Connected to ${host.label || host.host}` } : null)
         // Very brief flash of the success state, then auto-switch
@@ -467,7 +467,7 @@ export default function HostsSection() {
 
           {/* Keys list */}
           <div style={{ flex: 1, overflow: 'auto', padding: 10 }}>
-            {filteredKeys.length === 0 ? (
+            {keys !== null && filteredKeys.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 10, textAlign: 'center', padding: '40px 20px' }}>
                 <div style={{ color: ui.textDim, opacity: 0.6 }}>
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
@@ -523,7 +523,7 @@ export default function HostsSection() {
               <div style={{ background: ui.bgSecondary, border: `1px solid ${ui.border}`, borderRadius: 10, padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: `0 12px 40px ${ui.shadow}`, maxWidth: 280, width: '100%' }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: ui.text }}>Remove key?</div>
                 <div style={{ fontSize: 12, color: ui.textMuted, lineHeight: 1.5 }}>
-                  Remove <strong style={{ color: ui.text }}>{keys.find(k => k.id === confirmDeleteKey)?.name || 'this key'}</strong>? The file won't be deleted.
+                  Remove <strong style={{ color: ui.text }}>{(keys ?? []).find(k => k.id === confirmDeleteKey)?.name || 'this key'}</strong>? The file won't be deleted.
                 </div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button onClick={() => setConfirmDeleteKey(null)} style={{ padding: '5px 12px', fontSize: 12, background: ui.bgTertiary, border: `1px solid ${ui.border}`, borderRadius: 5, color: ui.textMuted, cursor: 'pointer' }}>Cancel</button>
@@ -620,7 +620,7 @@ export default function HostsSection() {
 
         {/* Host list */}
         <div style={{ flex: 1, overflow: 'auto', padding: 10 }}>
-          {filtered.length === 0 ? (
+          {hosts !== null && filtered.length === 0 ? (
             <EmptyState ui={ui} hasSearch={!!search} />
           ) : view === 'grid' ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
@@ -642,14 +642,14 @@ export default function HostsSection() {
         {/* Add/Edit form modal */}
         {isAdding && (
           <HostForm form={form} setForm={setForm} editing={editing} ui={ui}
-            keys={keys}
+            keys={keys ?? []}
             onSave={saveForm} onCancel={() => { setIsAdding(false); setEditing(null) }} />
         )}
 
         {/* Delete confirm */}
         {confirmDelete && (
           <ConfirmDelete ui={ui}
-            hostLabel={hosts.find(h => h.id === confirmDelete)?.label || 'this host'}
+            hostLabel={(hosts ?? []).find(h => h.id === confirmDelete)?.label || 'this host'}
             onConfirm={() => deleteHost(confirmDelete)}
             onCancel={() => setConfirmDelete(null)} />
         )}

@@ -46,11 +46,19 @@ interface Store {
   sidePanelSection: SidePanelSection | null
   sidePanelWidth: number
   closeConfirmOpen: boolean
+  /** Update available: { version, releaseNotes } or null */
+  updateAvailable: { version: string; releaseNotes?: string } | null
+  /** Update download in progress */
+  updateDownloading: boolean
+  /** Update downloaded, ready to install */
+  updateDownloaded: boolean
   fontZoomTick: number
   sshConnections: SshConnectionInfo[]
   focusMode: 'off' | 'zen' | 'fullscreen'
   /** Temporary filter to pre-select a Libraries category when navigating from another panel */
   libraryFilter: string | null
+  /** True once initStore() has completed and tabs have been restored */
+  initialized: boolean
 }
 
 let state: Store = {
@@ -69,10 +77,14 @@ let state: Store = {
   sidePanelSection: null,
   sidePanelWidth: 280,
   closeConfirmOpen: false,
+  updateAvailable: null,
+  updateDownloading: false,
+  updateDownloaded: false,
   fontZoomTick: 0,
   sshConnections: [],
   focusMode: 'off',
   libraryFilter: null,
+  initialized: false,
 }
 
 const listeners = new Set<Listener>()
@@ -572,4 +584,5 @@ export async function initStore() {
   if (mergedSettings.alwaysOnTop) {
     window.api.setAlwaysOnTop(true)
   }
+  setState({ initialized: true })
 }

@@ -11,6 +11,7 @@ import SftpPanel from './components/SftpPanel'
 import SettingsPanel from './components/SettingsPanel'
 import SidePanel from './components/SidePanel'
 import CloseConfirmModal from './components/CloseConfirmModal'
+import UpdateModal from './components/UpdateModal'
 
 export default function App() {
   const { tabs, theme, settings, sidePanelOpen, sidePanelSection, focusMode } = useStore()
@@ -150,6 +151,7 @@ export default function App() {
       <SftpPanel />
       <SettingsPanel />
       <CloseConfirmModal />
+      <UpdateModal />
     </div>
   )
 }
