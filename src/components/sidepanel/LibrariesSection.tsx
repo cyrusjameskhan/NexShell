@@ -723,6 +723,7 @@ export default function LibrariesSection() {
 
       let resolved = false
       let pollTimer: ReturnType<typeof setTimeout> | null = null
+      let lastDataAt = 0
 
       // Poll the check command once the PTY goes quiet for 2s.
       // This is much more reliable than trying to parse installer output.

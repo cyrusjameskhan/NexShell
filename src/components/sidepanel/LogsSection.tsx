@@ -37,7 +37,7 @@ export default function LogsSection() {
 
   const handleDelete = async (id: string) => {
     await window.api.deleteLog(id)
-    setLogs(prev => prev.filter(l => l.id !== id))
+    setLogs(prev => (prev ?? []).filter(l => l.id !== id))
     if (selected?.id === id) setSelected(null)
   }
 
