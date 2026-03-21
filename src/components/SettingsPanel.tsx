@@ -153,7 +153,7 @@ export default function SettingsPanel() {
               </SettingRow>
 
               <SettingRow label="Font Family" ui={ui}>
-                {['fallout', 'amber-crt', 'commodore64', 'windows98'].includes(theme.id) ? (
+                {['commodore64', 'windows98'].includes(theme.id) ? (
                   <div style={{
                     ...inputStyle(ui),
                     display: 'flex',
@@ -239,6 +239,16 @@ export default function SettingsPanel() {
                   ui={ui}
                 />
               </SettingRow>
+
+              {theme.category === 'extra' && (
+                <SettingRow label="Typing Sound Effects (Experimental)" ui={ui}>
+                  <Toggle
+                    value={localSettings.typingSfx ?? false}
+                    onChange={v => save({ typingSfx: v })}
+                    ui={ui}
+                  />
+                </SettingRow>
+              )}
 
               <SettingRow label="Updates" ui={ui}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

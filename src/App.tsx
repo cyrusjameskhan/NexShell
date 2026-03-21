@@ -118,7 +118,6 @@ export default function App() {
       className={
         theme.id === 'windows98' ? 'win98' :
         theme.id === 'commodore64' ? 'c64' :
-        (theme.id === 'fallout' || theme.id === 'amber-crt') ? 'dos-font' :
         undefined
       }
       style={{

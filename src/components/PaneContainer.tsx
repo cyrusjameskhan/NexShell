@@ -4,10 +4,10 @@ import {
   setActivePaneInWorkspace, closePane,
   fillEmptyPane, closeEmptyPane, dropTabIntoEmptySlot,
   ejectPaneToTab, dragSplitOntoPane, movePaneWithinWorkspace, movePaneAcrossWorkspaces,
-  renameSession, createTab, defaultShellName,
+  renameSession, createTab, defaultShellName, setWorkspaceSplitRatios, splitPane,
 } from '../store'
 import { SplitNode, Workspace } from '../types'
-import TerminalView from './Terminal'
+import TerminalView, { setResizeSuppressed } from './Terminal'
 
 type DropZonePos = 'left' | 'right' | 'top' | 'bottom' | null
 
@@ -118,6 +118,7 @@ function WorkspaceView({ ws, activeSessionId, ui, termBg }: {
       <SplitNodeView
         node={ws.root}
         workspace={ws}
+        path={[]}
         activeSessionId={activeSessionId}
         ui={ui}
         termBg={termBg}
@@ -127,13 +128,69 @@ function WorkspaceView({ ws, activeSessionId, ui, termBg }: {
 }
 
 // ── Recursive split node renderer ────────────────────────────────────────────
-function SplitNodeView({ node, workspace, activeSessionId, ui, termBg }: {
+const MIN_SPLIT_PANE_PX = 48
+
+function normalizePaneRatios(ratios: number[] | undefined, len: number): number[] {
+  if (!ratios || ratios.length !== len) return Array(len).fill(1)
+  return ratios.map(r => Math.max(0.05, r))
+}
+
+function ratiosFromBoundary(
+  ratios: number[],
+  i: number,
+  boundaryPx: number,
+  containerPx: number,
+): number[] {
+  if (containerPx <= 0) return ratios
+  const S = ratios.reduce((a, b) => a + b, 0)
+  const prefix = ratios.slice(0, i).reduce((a, b) => a + b, 0)
+  const pairSum = ratios[i] + ratios[i + 1]
+  let newRi = (boundaryPx / containerPx) * S - prefix
+  const minR = (MIN_SPLIT_PANE_PX / containerPx) * S
+  newRi = Math.max(minR, Math.min(pairSum - minR, newRi))
+  const next = [...ratios]
+  next[i] = newRi
+  next[i + 1] = pairSum - newRi
+  return next
+}
+
+/** Clamp a pixel position to the min-pane constraints. */
+function clampSashPx(
+  posPx: number,
+  siblingIndex: number,
+  ratios: number[],
+  containerPx: number,
+): number {
+  const S = ratios.reduce((a, b) => a + b, 0)
+  const prefix = ratios.slice(0, siblingIndex).reduce((a, b) => a + b, 0)
+  const pairSum = ratios[siblingIndex] + ratios[siblingIndex + 1]
+  const pairEnd = (prefix + pairSum) / S * containerPx
+  const pairStart = prefix / S * containerPx
+  return Math.max(pairStart + MIN_SPLIT_PANE_PX, Math.min(pairEnd - MIN_SPLIT_PANE_PX, posPx))
+}
+
+// ── Ghost-sash split resize ──────────────────────────────────────────────────
+// During drag nothing about the pane layout changes — zero flex recalculation,
+// zero xterm resize work.  Only a floating highlight line (the "ghost sash")
+// slides via CSS `translate`.  The actual layout change happens once on release.
+
+function SplitNodeView({ node, workspace, path, activeSessionId, ui, termBg }: {
   node: SplitNode
   workspace: Workspace
+  path: number[]
   activeSessionId: string | null
   ui: any
   termBg: string
 }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const ghostRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{
+    siblingIndex: number
+    startPx: number
+    startSashPx: number
+    ratios: number[]
+  } | null>(null)
+
   if (node.type === 'leaf') {
     if (node.sessionId === null) {
       return <DropZone workspaceId={workspace.id} ui={ui} termBg={termBg} />
@@ -149,34 +206,164 @@ function SplitNodeView({ node, workspace, activeSessionId, ui, termBg }: {
   }
 
   const isHorizontal = node.direction === 'horizontal'
+  const n = node.children.length
+  const ratios = normalizePaneRatios(node.ratios, n)
+
+  const showGhost = (posPx: number) => {
+    const g = ghostRef.current
+    if (!g) return
+    g.style.display = 'block'
+    if (isHorizontal) {
+      g.style.left = `${posPx}px`
+      g.style.top = '0'
+      g.style.width = '2px'
+      g.style.height = '100%'
+    } else {
+      g.style.top = `${posPx}px`
+      g.style.left = '0'
+      g.style.height = '2px'
+      g.style.width = '100%'
+    }
+  }
+  const hideGhost = () => {
+    const g = ghostRef.current
+    if (g) g.style.display = 'none'
+  }
+
+  const onSashPointerDown = (e: React.PointerEvent, siblingIndex: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const el = containerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const pointerPx = isHorizontal ? e.clientX : e.clientY
+    const originPx = isHorizontal ? rect.left : rect.top
+    const containerPx = isHorizontal ? rect.width : rect.height
+
+    // Compute where the sash currently sits (boundary between child i and i+1)
+    const S = ratios.reduce((a, b) => a + b, 0)
+    const prefix = ratios.slice(0, siblingIndex + 1).reduce((a, b) => a + b, 0)
+    const sashPx = (prefix / S) * containerPx
+
+    dragRef.current = {
+      siblingIndex,
+      startPx: pointerPx,
+      startSashPx: sashPx,
+      ratios: [...ratios],
+    }
+    setResizeSuppressed(true)
+    showGhost(clampSashPx(sashPx, siblingIndex, ratios, containerPx))
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+
+    const onMove = (ev: PointerEvent) => {
+      const d = dragRef.current
+      if (!d) return
+      const curPx = isHorizontal ? ev.clientX : ev.clientY
+      const newSashPx = d.startSashPx + (curPx - d.startPx)
+      showGhost(clampSashPx(newSashPx, d.siblingIndex, d.ratios, containerPx))
+    }
+
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onCancel)
+      const d = dragRef.current
+      dragRef.current = null
+      hideGhost()
+      setResizeSuppressed(false)
+      if (!d) return
+      const curPx = isHorizontal ? ev.clientX : ev.clientY
+      const finalSashPx = clampSashPx(d.startSashPx + (curPx - d.startPx), d.siblingIndex, d.ratios, containerPx)
+      const next = ratiosFromBoundary(d.ratios, d.siblingIndex, finalSashPx, containerPx)
+      setWorkspaceSplitRatios(workspace.id, path, next)
+    }
+
+    const onCancel = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onCancel)
+      dragRef.current = null
+      hideGhost()
+      setResizeSuppressed(false)
+    }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onCancel)
+  }
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: isHorizontal ? 'row' : 'column',
-      width: '100%',
-      height: '100%',
-    }}>
-      {node.children.map((child, i) => {
-        const isLast = i === node.children.length - 1
-        const borderStyle = isHorizontal && !isLast
-          ? { borderRight: `1px solid ${ui.border}` }
-          : !isHorizontal && !isLast
-            ? { borderBottom: `1px solid ${ui.border}` }
-            : {}
-
-        return (
-          <div key={i} style={{ flex: 1, overflow: 'hidden', ...borderStyle }}>
-            <SplitNodeView
-              node={child}
-              workspace={workspace}
-              activeSessionId={activeSessionId}
-              ui={ui}
-              termBg={termBg}
-            />
-          </div>
-        )
-      })}
+    <div
+      ref={containerRef}
+      style={{
+        display: 'flex',
+        flexDirection: isHorizontal ? 'row' : 'column',
+        width: '100%',
+        height: '100%',
+        position: 'relative',
+        minWidth: 0,
+        minHeight: 0,
+      }}
+    >
+      {node.children.map((child, i) => (
+        <div
+          key={i}
+          style={{
+            flexGrow: ratios[i],
+            flexShrink: 1,
+            flexBasis: '0%',
+            minWidth: isHorizontal ? 0 : undefined,
+            minHeight: isHorizontal ? undefined : 0,
+            overflow: 'hidden',
+            position: 'relative',
+          }}
+        >
+          {i > 0 && (
+            <div
+              onPointerDown={e => onSashPointerDown(e, i - 1)}
+              style={{
+                position: 'absolute',
+                zIndex: 30,
+                touchAction: 'none',
+                ...(isHorizontal
+                  ? { top: 0, bottom: 0, left: -3, width: 6, cursor: 'col-resize' }
+                  : { left: 0, right: 0, top: -3, height: 6, cursor: 'row-resize' }),
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  ...(isHorizontal
+                    ? { top: 0, bottom: 0, left: '50%', width: 1, marginLeft: -0.5, background: ui.border }
+                    : { left: 0, right: 0, top: '50%', height: 1, marginTop: -0.5, background: ui.border }),
+                }}
+              />
+            </div>
+          )}
+          <SplitNodeView
+            node={child}
+            workspace={workspace}
+            path={[...path, i]}
+            activeSessionId={activeSessionId}
+            ui={ui}
+            termBg={termBg}
+          />
+        </div>
+      ))}
+      {/* Ghost sash — a floating highlight that slides during drag */}
+      <div
+        ref={ghostRef}
+        style={{
+          display: 'none',
+          position: 'absolute',
+          zIndex: 50,
+          background: ui.accent,
+          opacity: 0.5,
+          borderRadius: 1,
+          pointerEvents: 'none',
+          willChange: 'left, top',
+        }}
+      />
     </div>
   )
 }
@@ -496,6 +683,7 @@ function PaneHeader({ sessionId, workspaceId, isFocused, ui }: {
   const name = sessions.find(s => s.id === sessionId)?.name ?? 'PowerShell'
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(name)
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -504,6 +692,14 @@ function PaneHeader({ sessionId, workspaceId, isFocused, ui }: {
       setTimeout(() => inputRef.current?.select(), 0)
     }
   }, [editing])
+
+  useEffect(() => {
+    if (!ctxMenu) return
+    const close = () => setCtxMenu(null)
+    window.addEventListener('click', close)
+    window.addEventListener('contextmenu', close)
+    return () => { window.removeEventListener('click', close); window.removeEventListener('contextmenu', close) }
+  }, [ctxMenu])
 
   const commit = () => {
     renameSession(sessionId, draft)
@@ -519,6 +715,11 @@ function PaneHeader({ sessionId, workspaceId, isFocused, ui }: {
         e.dataTransfer.setData('pane/sessionId', sessionId)
         e.dataTransfer.effectAllowed = 'move'
       }}
+      onContextMenu={e => {
+        e.preventDefault()
+        e.stopPropagation()
+        setCtxMenu({ x: e.clientX, y: e.clientY })
+      }}
       style={{
         height: 30, display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', padding: '0 8px',
@@ -526,6 +727,7 @@ function PaneHeader({ sessionId, workspaceId, isFocused, ui }: {
         borderBottom: `1px solid ${ui.border}`,
         cursor: editing ? 'default' : 'grab',
         flexShrink: 0, userSelect: 'none', gap: 6,
+        position: 'relative',
       }}
       onMouseDown={e => { if ((e.target as HTMLElement).closest('button, input')) e.preventDefault() }}
     >
@@ -566,7 +768,7 @@ function PaneHeader({ sessionId, workspaceId, isFocused, ui }: {
             flex: 1, fontSize: 11, fontWeight: 500,
             color: isFocused ? ui.text : ui.textMuted,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            cursor: 'text',
+            cursor: 'inherit',
           }}
           title="Double-click to rename"
         >
@@ -593,6 +795,71 @@ function PaneHeader({ sessionId, workspaceId, isFocused, ui }: {
           <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
         </svg>
       </button>
+
+      {ctxMenu && (
+        <PaneContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          ui={ui}
+          onSplitH={() => { setCtxMenu(null); splitPane(workspaceId, sessionId, 'horizontal') }}
+          onSplitV={() => { setCtxMenu(null); splitPane(workspaceId, sessionId, 'vertical') }}
+          onRename={() => { setCtxMenu(null); setEditing(true) }}
+          onClose={() => { setCtxMenu(null); closePane(workspaceId, sessionId) }}
+        />
+      )}
+    </div>
+  )
+}
+
+function PaneContextMenu({ x, y, ui, onSplitH, onSplitV, onRename, onClose }: {
+  x: number; y: number; ui: any
+  onSplitH: () => void; onSplitV: () => void; onRename: () => void; onClose: () => void
+}) {
+  return (
+    <div
+      data-win98-exempt
+      onClick={e => e.stopPropagation()}
+      onContextMenu={e => e.stopPropagation()}
+      style={{
+        position: 'fixed', left: x, top: y,
+        background: ui.bgSecondary,
+        border: `1px solid ${ui.border}`,
+        borderRadius: 8,
+        boxShadow: `0 8px 24px rgba(0,0,0,0.35)`,
+        padding: '4px',
+        zIndex: 9999,
+        minWidth: 170,
+      }}
+    >
+      {[
+        { label: 'Split Horizontally', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>, action: onSplitH },
+        { label: 'Split Vertically',   icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="12" x2="21" y2="12"/></svg>, action: onSplitV },
+        null,
+        { label: 'Rename',             icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>, action: onRename },
+        null,
+        { label: 'Close Pane',         icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>, action: onClose, danger: true },
+      ].map((item, i) =>
+        item === null
+          ? <div key={i} style={{ height: 1, background: ui.border, margin: '4px 0' }} />
+          : (
+            <button
+              key={i}
+              onClick={item.action}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                padding: '7px 10px', borderRadius: 5,
+                background: 'transparent', border: 'none',
+                color: item.danger ? ui.danger : ui.text,
+                fontSize: 12, cursor: 'pointer', textAlign: 'left',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = item.danger ? ui.danger + '20' : ui.bgTertiary }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <span style={{ color: item.danger ? ui.danger : ui.textMuted, display: 'flex' }}>{item.icon}</span>
+              {item.label}
+            </button>
+          )
+      )}
     </div>
   )
 }

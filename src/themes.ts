@@ -1117,24 +1117,6 @@ export const themes: TerminalTheme[] = [
       flicker: true,
       flickerIntensity: 0.04,
       postProcessFilter: 'sepia(1) saturate(5) hue-rotate(80deg) brightness(0.92)',
-      globalCss: `
-        .dos-font, .dos-font * {
-          font-family: 'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
-          font-size: 15px !important;
-          line-height: 1.3 !important;
-          -webkit-font-smoothing: none !important;
-          font-smooth: never !important;
-          letter-spacing: 0 !important;
-        }
-        .dos-font input, .dos-font button, .dos-font select, .dos-font textarea {
-          font-family: 'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
-          font-size: 15px !important;
-        }
-        .dos-font svg, .dos-font svg * {
-          font-family: inherit !important;
-          font-size: inherit !important;
-        }
-      `,
     },
     colors: {
       background: '#0a0e00',
@@ -1283,24 +1265,6 @@ export const themes: TerminalTheme[] = [
       flicker: true,
       flickerIntensity: 0.02,
       postProcessFilter: 'sepia(1) saturate(3.5) hue-rotate(0deg) brightness(0.9)',
-      globalCss: `
-        .dos-font, .dos-font * {
-          font-family: 'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
-          font-size: 15px !important;
-          line-height: 1.3 !important;
-          -webkit-font-smoothing: none !important;
-          font-smooth: never !important;
-          letter-spacing: 0 !important;
-        }
-        .dos-font input, .dos-font button, .dos-font select, .dos-font textarea {
-          font-family: 'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace !important;
-          font-size: 15px !important;
-        }
-        .dos-font svg, .dos-font svg * {
-          font-family: inherit !important;
-          font-size: inherit !important;
-        }
-      `,
     },
     colors: {
       background: '#1a0e00',

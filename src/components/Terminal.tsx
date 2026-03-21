@@ -15,6 +15,12 @@ interface Props {
   isActive: boolean
 }
 
+// Set to true while a pane split is being dragged — suppresses ResizeObserver
+// callbacks in every terminal so xterm doesn't do layout work on every pixel.
+// Reset to false on commit; terminals re-fit themselves via the observer.
+export let suppressTerminalResize = false
+export function setResizeSuppressed(v: boolean) { suppressTerminalResize = v }
+
 function buildXtermTheme(theme: TerminalTheme) {
   return {
     background: theme.colors.background,
@@ -75,6 +81,198 @@ export default function TerminalView({ sessionId, isActive }: Props) {
   const aiSuggestionRef = useRef<string | null>(null)
   useEffect(() => { settingsRef.current = settings }, [settings])
   useEffect(() => { aiSuggestionRef.current = aiSuggestion }, [aiSuggestion])
+
+  // Web Audio context for typing SFX — created lazily on first use
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const themeRef = useRef(theme)
+  useEffect(() => { themeRef.current = theme }, [theme])
+
+  // Tracks whether we're waiting for the first PTY response after an Enter
+  const awaitingResponseRef = useRef(false)
+
+  // Decoded sample pools — loaded once, played randomly each time
+  const enterBuffersRef = useRef<AudioBuffer[]>([])
+  const awaitBuffersRef = useRef<AudioBuffer[]>([])
+  const sfxLoadedRef = useRef(false)
+  // Track last index played to avoid immediate repeats
+  const lastEnterIdxRef = useRef(-1)
+  const lastAwaitIdxRef = useRef(-1)
+
+  function getAudioCtx(): AudioContext | null {
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
+      return audioCtxRef.current
+    } catch { return null }
+  }
+
+  // Load all WAV samples into decoded AudioBuffers once
+  const loadSfxSamples = useCallback(async () => {
+    if (sfxLoadedRef.current) return
+    sfxLoadedRef.current = true
+    const ctx = getAudioCtx()
+    if (!ctx) return
+
+    const load = async (url: string): Promise<AudioBuffer | null> => {
+      try {
+        const res = await fetch(url)
+        if (!res.ok) return null
+        const arrayBuf = await res.arrayBuffer()
+        return await ctx.decodeAudioData(arrayBuf)
+      } catch { return null }
+    }
+
+    const [e1, e2, e3, a1, a2, a3, a4] = await Promise.all([
+      load('/sfx/enter_1.wav'),
+      load('/sfx/enter_2.wav'),
+      load('/sfx/enter_3.wav'),
+      load('/sfx/await_1.wav'),
+      load('/sfx/await_2.wav'),
+      load('/sfx/await_3.wav'),
+      load('/sfx/await_4.wav'),
+    ])
+
+    enterBuffersRef.current = [e1, e2, e3].filter(Boolean) as AudioBuffer[]
+    awaitBuffersRef.current = [a1, a2, a3, a4].filter(Boolean) as AudioBuffer[]
+  }, [])
+
+  // Pick a random index that isn't the same as last time
+  function pickRandom(poolLen: number, lastIdx: number): number {
+    if (poolLen === 1) return 0
+    let idx: number
+    do { idx = Math.floor(Math.random() * poolLen) } while (idx === lastIdx)
+    return idx
+  }
+
+  function playSample(pool: AudioBuffer[], lastIdxRef: React.MutableRefObject<number>) {
+    if (pool.length === 0) return
+    const ctx = getAudioCtx()
+    if (!ctx) return
+    try {
+      const idx = pickRandom(pool.length, lastIdxRef.current)
+      lastIdxRef.current = idx
+      const src = ctx.createBufferSource()
+      src.buffer = pool[idx]
+      src.playbackRate.value = 1 + (Math.random() * 0.4 - 0.2)
+      src.connect(ctx.destination)
+      src.start()
+    } catch { /* silently ignore */ }
+  }
+
+  const playTypingClick = useCallback(() => {
+    if (!settingsRef.current.typingSfx) return
+    if (themeRef.current.category !== 'extra') return
+    const ctx = getAudioCtx()
+    if (!ctx) return
+    try {
+      const now = ctx.currentTime
+
+      // Short white-noise burst — mechanical "click" feel
+      const bufLen = Math.floor(ctx.sampleRate * 0.018)
+      const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate)
+      const data = buf.getChannelData(0)
+      for (let i = 0; i < bufLen; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufLen, 3)
+      }
+      const noise = ctx.createBufferSource()
+      noise.buffer = buf
+
+      const filter = ctx.createBiquadFilter()
+      filter.type = 'bandpass'
+      filter.frequency.value = 3200 * (1 + (Math.random() * 0.4 - 0.2))
+      filter.Q.value = 0.8
+
+      const gain = ctx.createGain()
+      gain.gain.setValueAtTime(0.22, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.018)
+
+      noise.connect(filter)
+      filter.connect(gain)
+      gain.connect(ctx.destination)
+      noise.start(now)
+      noise.stop(now + 0.02)
+    } catch { /* silently ignore */ }
+  }, [])
+
+  const playEnterThunk = useCallback(() => {
+    if (!settingsRef.current.typingSfx) return
+    if (themeRef.current.category !== 'extra') return
+    // Use sample pool if loaded, otherwise fall back to synthesis
+    if (enterBuffersRef.current.length > 0) {
+      playSample(enterBuffersRef.current, lastEnterIdxRef)
+      return
+    }
+    const ctx = getAudioCtx()
+    if (!ctx) return
+    try {
+      const now = ctx.currentTime
+      const bufLen = Math.floor(ctx.sampleRate * 0.04)
+      const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate)
+      const data = buf.getChannelData(0)
+      for (let i = 0; i < bufLen; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufLen, 2)
+      }
+      const noise = ctx.createBufferSource()
+      noise.buffer = buf
+      const filter = ctx.createBiquadFilter()
+      filter.type = 'lowpass'
+      filter.frequency.value = 900
+      filter.Q.value = 1.2
+      const osc = ctx.createOscillator()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(120, now)
+      osc.frequency.exponentialRampToValueAtTime(60, now + 0.04)
+      const oscGain = ctx.createGain()
+      oscGain.gain.setValueAtTime(0.18, now)
+      oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06)
+      const noiseGain = ctx.createGain()
+      noiseGain.gain.setValueAtTime(0.28, now)
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04)
+      noise.connect(filter)
+      filter.connect(noiseGain)
+      noiseGain.connect(ctx.destination)
+      osc.connect(oscGain)
+      oscGain.connect(ctx.destination)
+      noise.start(now)
+      noise.stop(now + 0.05)
+      osc.start(now)
+      osc.stop(now + 0.07)
+    } catch { /* silently ignore */ }
+  }, [])
+
+  const playResponseChime = useCallback(() => {
+    if (!settingsRef.current.typingSfx) return
+    if (themeRef.current.category !== 'extra') return
+    // Use sample pool if loaded, otherwise fall back to synthesis
+    if (awaitBuffersRef.current.length > 0) {
+      playSample(awaitBuffersRef.current, lastAwaitIdxRef)
+      return
+    }
+    const ctx = getAudioCtx()
+    if (!ctx) return
+    try {
+      const now = ctx.currentTime
+      const freqs = [880, 1320]
+      freqs.forEach((freq, i) => {
+        const osc = ctx.createOscillator()
+        osc.type = 'sine'
+        osc.frequency.value = freq
+        const gain = ctx.createGain()
+        const t = now + i * 0.07
+        gain.gain.setValueAtTime(0, t)
+        gain.gain.linearRampToValueAtTime(0.09, t + 0.01)
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12)
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.start(t)
+        osc.stop(t + 0.14)
+      })
+    } catch { /* silently ignore */ }
+  }, [])
+
+  // Kick off sample loading as soon as the component mounts
+  useEffect(() => {
+    loadSfxSamples()
+  }, [loadSfxSamples])
 
   // Batched write buffer — accumulates PTY data and flushes on rAF
   // so we write to the terminal once per frame instead of per IPC message
@@ -314,8 +512,8 @@ export default function TerminalView({ sessionId, isActive }: Props) {
 
     const term = new XTerm({
       theme: buildXtermTheme(theme),
-      fontSize: (theme.id === 'fallout' || theme.id === 'amber-crt') ? Math.max(settings.fontSize, 18) : settings.fontSize,
-      fontFamily: theme.id === 'commodore64' ? "'Commodore 64', monospace" : (theme.id === 'fallout' || theme.id === 'amber-crt') ? "'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace" : theme.id === 'windows98' ? "'W95FA', 'Fixedsys', 'Consolas', monospace" : settings.fontFamily,
+      fontSize: settings.fontSize,
+      fontFamily: theme.id === 'commodore64' ? "'Commodore 64', monospace" : theme.id === 'windows98' ? "'W95FA', 'Fixedsys', 'Consolas', monospace" : settings.fontFamily,
       letterSpacing: theme.id === 'windows98' ? -4 : 0,
       lineHeight: theme.id === 'commodore64' ? 1.4 : 1,
       cursorStyle: settings.cursorStyle,
@@ -390,6 +588,11 @@ export default function TerminalView({ sessionId, isActive }: Props) {
         if (cleanOutputRef.current.length > 4000) {
           cleanOutputRef.current = cleanOutputRef.current.slice(-2000)
         }
+        // Fire response chime once on the first meaningful output after Enter
+        if (awaitingResponseRef.current) {
+          awaitingResponseRef.current = false
+          playResponseChime()
+        }
       }
       scheduleFlush()
     })
@@ -446,6 +649,8 @@ export default function TerminalView({ sessionId, isActive }: Props) {
       window.api.writePty(sessionId, data)
 
       if (data === '\r' || data === '\n') {
+        playEnterThunk()
+        awaitingResponseRef.current = true
         const cmd = currentLineRef.current.trim()
         if (cmd) {
           window.api.addHistory(cmd)
@@ -454,6 +659,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
         currentLineRef.current = ''
         setAiSuggestion(null)
       } else if (data === '\x7f' || data === '\b') {
+        playTypingClick()
         currentLineRef.current = currentLineRef.current.slice(0, -1)
         clearTimeout(aiTimeoutRef.current)
         aiTimeoutRef.current = setTimeout(
@@ -461,6 +667,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
           400
         )
       } else if (data.length === 1 && data >= ' ') {
+        playTypingClick()
         currentLineRef.current += data
         clearTimeout(aiTimeoutRef.current)
         aiTimeoutRef.current = setTimeout(
@@ -477,11 +684,15 @@ export default function TerminalView({ sessionId, isActive }: Props) {
     // VS Code-style split resize: row changes are cheap (no reflow) and
     // applied immediately for snappy vertical resize.  Column changes
     // trigger expensive text reflow so they are debounced at 100 ms.
+    // While a pane split is being dragged, suppressTerminalResize is true
+    // so we skip all layout work; the drag commit clears it and a single
+    // trailing fit runs when the observer fires after the final DOM update.
     let colDebounce: ReturnType<typeof setTimeout>
     let lastFitCols = term.cols
     let lastFitRows = term.rows
     const resizeObserver = new ResizeObserver(() => {
       if (!ptyStarted) return
+      if (suppressTerminalResize) return
       let dims: { cols: number; rows: number } | undefined
       try {
         dims = fitAddon.proposeDimensions()
@@ -570,8 +781,8 @@ export default function TerminalView({ sessionId, isActive }: Props) {
     if (!xtermRef.current) return
     const term = xtermRef.current
     term.options.theme = buildXtermTheme(theme)
-    term.options.fontSize = (theme.id === 'fallout' || theme.id === 'amber-crt') ? Math.max(settings.fontSize, 18) : settings.fontSize
-    term.options.fontFamily = theme.id === 'commodore64' ? "'Commodore 64', monospace" : (theme.id === 'fallout' || theme.id === 'amber-crt') ? "'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace" : theme.id === 'windows98' ? "'W95FA', 'Fixedsys', 'Consolas', monospace" : settings.fontFamily
+    term.options.fontSize = settings.fontSize
+    term.options.fontFamily = theme.id === 'commodore64' ? "'Commodore 64', monospace" : theme.id === 'windows98' ? "'W95FA', 'Fixedsys', 'Consolas', monospace" : settings.fontFamily
     term.options.letterSpacing = theme.id === 'windows98' ? -4 : 0
     term.options.lineHeight = theme.id === 'commodore64' ? 1.4 : 1
     const fit = () => fitAddonRef.current?.fit()
@@ -593,8 +804,8 @@ export default function TerminalView({ sessionId, isActive }: Props) {
 
   useEffect(() => {
     if (xtermRef.current) {
-      xtermRef.current.options.fontSize = (theme.id === 'fallout' || theme.id === 'amber-crt') ? Math.max(settings.fontSize, 18) : settings.fontSize
-      xtermRef.current.options.fontFamily = theme.id === 'commodore64' ? "'Commodore 64', monospace" : (theme.id === 'fallout' || theme.id === 'amber-crt') ? "'VT323', 'IBM 3270', 'Fallouty', 'Perfect DOS VGA 437', 'Courier New', monospace" : theme.id === 'windows98' ? "'W95FA', 'Fixedsys', 'Consolas', monospace" : settings.fontFamily
+      xtermRef.current.options.fontSize = settings.fontSize
+      xtermRef.current.options.fontFamily = theme.id === 'commodore64' ? "'Commodore 64', monospace" : theme.id === 'windows98' ? "'W95FA', 'Fixedsys', 'Consolas', monospace" : settings.fontFamily
       xtermRef.current.options.cursorStyle = settings.cursorStyle
       xtermRef.current.options.cursorBlink = settings.cursorBlink
       setTimeout(() => fitAddonRef.current?.fit(), 10)

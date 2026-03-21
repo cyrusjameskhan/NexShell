@@ -83,7 +83,8 @@ export interface TerminalSession {
 // Recursive split tree — each node is either a leaf (terminal) or a branch (split)
 export type SplitNode =
   | { type: 'leaf'; sessionId: string | null }  // null = empty drop slot
-  | { type: 'split'; direction: 'horizontal' | 'vertical'; children: SplitNode[] }
+  /** `ratios` — optional flex weights per child (same length as children); omitted = equal */
+  | { type: 'split'; direction: 'horizontal' | 'vertical'; children: SplitNode[]; ratios?: number[] }
 
 export interface Workspace {
   id: string
@@ -120,6 +121,8 @@ export interface AppSettings {
   alwaysOnTop: boolean
   /** UI scale factor 0.75–1.5 (default 1.0) */
   uiScale: number
+  /** Play mechanical click SFX on keypresses (only available on Extra themes) */
+  typingSfx: boolean
 }
 
 export type SidePanelSection = 'hosts' | 'agents' | 'variables' | 'snippets' | 'logs' | 'libraries'

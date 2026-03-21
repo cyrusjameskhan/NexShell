@@ -23,6 +23,7 @@ const defaultSettings: AppSettings = {
   opacity: 1,
   alwaysOnTop: false,
   uiScale: 1,
+  typingSfx: false,
 }
 
 export interface SshConnectionInfo {
@@ -108,6 +109,11 @@ function makeSession(): TerminalSession {
 
 // ── SplitNode tree utilities ─────────────────────────────────────────────────
 
+function normalizeSplitRatios(ratios: number[] | undefined, len: number): number[] {
+  if (!ratios || ratios.length !== len) return Array(len).fill(1)
+  return ratios.map(r => (r > 0 ? r : 0.05))
+}
+
 function collectSessionIds(node: SplitNode): (string | null)[] {
   if (node.type === 'leaf') return [node.sessionId]
   return node.children.flatMap(collectSessionIds)
@@ -134,34 +140,99 @@ function removeLeaf(node: SplitNode, sessionId: string): SplitNode | null {
   if (node.type === 'leaf') {
     return node.sessionId === sessionId ? null : node
   }
-  const remaining = node.children
-    .map(c => removeLeaf(c, sessionId))
-    .filter(Boolean) as SplitNode[]
+  const oldRatios = node.ratios && node.ratios.length === node.children.length ? node.ratios : undefined
+  const results = node.children.map(c => removeLeaf(c, sessionId))
+  const remaining: SplitNode[] = []
+  const keptRatios: number[] = []
+  results.forEach((c, i) => {
+    if (c !== null) {
+      remaining.push(c)
+      if (oldRatios) keptRatios.push(oldRatios[i])
+    }
+  })
   if (remaining.length === 0) return null
   if (remaining.length === 1) return remaining[0]
-  return { ...node, children: remaining }
+  const ratios = oldRatios ? keptRatios : (node.ratios && node.ratios.length === remaining.length ? node.ratios : undefined)
+  return { ...node, children: remaining, ratios }
 }
 
 // Simplify: flatten nested splits with same direction, unwrap single children
 function simplify(node: SplitNode): SplitNode {
   if (node.type === 'leaf') return node
   let children = node.children.map(simplify)
-  // Flatten same-direction children
+  const parentRatios = normalizeSplitRatios(node.ratios, children.length)
   const flat: SplitNode[] = []
-  for (const c of children) {
+  const flatRatios: number[] = []
+  for (let i = 0; i < children.length; i++) {
+    const c = children[i]
+    const pr = parentRatios[i]
     if (c.type === 'split' && c.direction === node.direction) {
-      flat.push(...c.children)
+      const cr = normalizeSplitRatios(c.ratios, c.children.length)
+      for (let j = 0; j < c.children.length; j++) {
+        flat.push(c.children[j])
+        flatRatios.push(pr * cr[j])
+      }
     } else {
       flat.push(c)
+      flatRatios.push(pr)
     }
   }
   if (flat.length === 1) return flat[0]
-  return { ...node, children: flat }
+  return { ...node, children: flat, ratios: flatRatios }
+}
+
+function updateSplitAtPath(root: SplitNode, path: number[], fn: (n: Extract<SplitNode, { type: 'split' }>) => SplitNode): SplitNode {
+  if (path.length === 0) {
+    if (root.type !== 'split') return root
+    return fn(root)
+  }
+  if (root.type === 'leaf') return root
+  const idx = path[0]
+  if (idx < 0 || idx >= root.children.length) return root
+  const newChild = updateSplitAtPath(root.children[idx], path.slice(1), fn)
+  if (newChild === root.children[idx]) return root
+  const newChildren = [...root.children]
+  newChildren[idx] = newChild
+  return { ...root, children: newChildren }
+}
+
+/** Set flex ratios for a split at `path` (indices from workspace root, e.g. [] = root split). */
+export function setWorkspaceSplitRatios(workspaceId: string, path: number[], ratios: number[]) {
+  const ws = state.workspaces.find(w => w.id === workspaceId)
+  if (!ws) return
+  const newRoot = updateSplitAtPath(ws.root, path, node => {
+    if (ratios.length !== node.children.length) return node
+    const clean = ratios.map(r => Math.max(0.05, r))
+    return { ...node, ratios: clean }
+  })
+  setState({ workspaces: state.workspaces.map(w => w.id === workspaceId ? { ...w, root: newRoot } : w) })
+}
+
+/** Strip all custom ratios from every split in the workspace tree, resetting to equal sizing. */
+export function equalizeWorkspacePanes(workspaceId: string) {
+  const ws = state.workspaces.find(w => w.id === workspaceId)
+  if (!ws) return
+  const strip = (node: SplitNode): SplitNode => {
+    if (node.type === 'leaf') return node
+    const { ratios: _r, ...rest } = node
+    return { ...rest, children: node.children.map(strip) }
+  }
+  setState({ workspaces: state.workspaces.map(w => w.id === workspaceId ? { ...w, root: strip(ws.root) } : w) })
 }
 
 // ── Tab / Session helpers ────────────────────────────────────────────────────
 
 export function getActiveTab(): Tab | null { return state.tabs[state.activeTabIndex] ?? null }
+
+export function reorderTab(fromIndex: number, toIndex: number) {
+  if (fromIndex === toIndex) return
+  const tabs = [...state.tabs]
+  const [moved] = tabs.splice(fromIndex, 1)
+  tabs.splice(toIndex, 0, moved)
+  const activeId = state.tabs[state.activeTabIndex]
+  const newActiveIndex = tabs.indexOf(activeId)
+  setState({ tabs, activeTabIndex: newActiveIndex >= 0 ? newActiveIndex : state.activeTabIndex })
+}
 
 export function createTab(): TerminalSession {
   const session = makeSession()
@@ -271,6 +342,15 @@ export function splitTab(tabIndex: number, direction: 'horizontal' | 'vertical')
     const newRoot = simplify(replaceLeaf(ws.root, targetId, newSplit))
     setState({ workspaces: state.workspaces.map(w => w.id === ws.id ? { ...w, root: newRoot } : w) })
   }
+}
+
+/** Split a specific pane (by sessionId) inside a workspace, adding an empty slot beside it. */
+export function splitPane(workspaceId: string, sessionId: string, direction: 'horizontal' | 'vertical') {
+  const ws = state.workspaces.find(w => w.id === workspaceId)
+  if (!ws) return
+  const newSplit: SplitNode = { type: 'split', direction, children: [{ type: 'leaf', sessionId }, { type: 'leaf', sessionId: null }] }
+  const newRoot = simplify(replaceLeaf(ws.root, sessionId, newSplit))
+  setState({ workspaces: state.workspaces.map(w => w.id === workspaceId ? { ...w, root: newRoot } : w) })
 }
 
 export function fillEmptyPane(workspaceId: string) {

@@ -4,7 +4,7 @@ import {
   createTab, closeTab, setActiveTab, splitTab,
   mergeTabIntoWorkspace, ejectPaneToTab, setState, getTabLabel,
   renameSession, renameWorkspace, toggleSidePanel, getActiveSessionSshConnection,
-  getState,
+  getState, equalizeWorkspacePanes, reorderTab,
 } from '../store'
 import { Tab } from '../types'
 
@@ -17,6 +17,14 @@ export default function TabBar() {
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
   const [paneEjectOver, setPaneEjectOver] = useState(false)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearHoverTimer = () => {
+    if (hoverTimer.current !== null) {
+      clearTimeout(hoverTimer.current)
+      hoverTimer.current = null
+    }
+  }
 
   useEffect(() => {
     if (!contextMenu) return
@@ -135,26 +143,51 @@ export default function TabBar() {
               setContextMenu({ x: e.clientX, y: e.clientY, tabIndex: i })
             }}
             onDragStart={e => { setDraggingIndex(i); e.dataTransfer.setData('tabIndex', String(i)) }}
-            onDragEnd={() => { setDraggingIndex(null); setDragOverIndex(null) }}
+            onDragEnd={() => { clearHoverTimer(); setDraggingIndex(null); setDragOverIndex(null) }}
             onDragOver={e => {
               if (e.dataTransfer.types.includes('pane/workspaceid')) return
               e.preventDefault()
-              if (draggingIndex !== null && draggingIndex !== i) setDragOverIndex(i)
+              if (draggingIndex !== null && draggingIndex !== i) {
+                setDragOverIndex(i)
+                // Start a hover timer to focus the target tab so the user can
+                // drag-and-drop onto a workspace or split target inside it.
+                if (hoverTimer.current === null) {
+                  hoverTimer.current = setTimeout(() => {
+                    hoverTimer.current = null
+                    setActiveTab(i)
+                  }, 500)
+                }
+              }
             }}
-            onDragLeave={() => setDragOverIndex(null)}
+            onDragLeave={() => { clearHoverTimer(); setDragOverIndex(null) }}
             onDrop={e => {
               if (e.dataTransfer.types.includes('pane/workspaceid')) return
               e.preventDefault()
+              clearHoverTimer()
               if (draggingIndex === null || draggingIndex === i) return
               const dropTab = tabs[i]
               if (dropTab.kind === 'workspace' && tabs[draggingIndex].kind === 'session') {
                 mergeTabIntoWorkspace(draggingIndex, dropTab.workspaceId)
+              } else {
+                reorderTab(draggingIndex, i)
               }
               setDraggingIndex(null)
               setDragOverIndex(null)
             }}
           />
         ))}
+        {/* Fills space to the right of tabs; double-click opens a new tab (like a browser tab strip). */}
+        <div
+          onDoubleClick={() => createTab()}
+          title="Double-click to open a new tab"
+          style={{
+            flex: 1,
+            minWidth: 8,
+            alignSelf: 'stretch',
+            cursor: 'default',
+            userSelect: 'none',
+          }}
+        />
       </div>
 
       {/* Right-side toolbar */}
@@ -201,6 +234,11 @@ export default function TabBar() {
           onSplitDown={() => {
             splitTab(contextMenu.tabIndex, 'vertical')
             setActiveTab(contextMenu.tabIndex)
+            setContextMenu(null)
+          }}
+          onEqualize={() => {
+            const t = tabs[contextMenu.tabIndex]
+            if (t.kind === 'workspace') equalizeWorkspacePanes(t.workspaceId)
             setContextMenu(null)
           }}
           onCloseTab={() => { closeTab(contextMenu.tabIndex); setContextMenu(null) }}
@@ -329,11 +367,13 @@ function TabItem({
 }
 
 // ── Context menu ─────────────────────────────────────────────────────────────
-function ContextMenu({ x, y, tabIndex, tab, ui, onClose, onRename, onSplitRight, onSplitDown, onCloseTab, onZenMode, onFullscreen }: {
+function ContextMenu({ x, y, tabIndex, tab, ui, onClose, onRename, onSplitRight, onSplitDown, onEqualize, onCloseTab, onZenMode, onFullscreen }: {
   x: number; y: number; tabIndex: number; tab: Tab; ui: any
-  onClose: () => void; onRename: () => void; onSplitRight: () => void; onSplitDown: () => void; onCloseTab: () => void; onZenMode: () => void; onFullscreen: () => void
+  onClose: () => void; onRename: () => void; onSplitRight: () => void; onSplitDown: () => void
+  onEqualize: () => void; onCloseTab: () => void; onZenMode: () => void; onFullscreen: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const isWorkspace = tab.kind === 'workspace'
 
   const style: React.CSSProperties = {
     position: 'fixed',
@@ -356,9 +396,10 @@ function ContextMenu({ x, y, tabIndex, tab, ui, onClose, onRename, onSplitRight,
       <MenuItem label="Zen Mode" icon={<ZenIcon />} onClick={onZenMode} ui={ui} />
       <MenuItem label="Fullscreen" icon={<FullscreenIcon />} onClick={onFullscreen} ui={ui} shortcut="F11" />
       <MenuDivider ui={ui} />
-      <MenuSection label="Split" ui={ui} />
-      <MenuItem label="Split Right" icon={<SplitHIcon />} onClick={onSplitRight} ui={ui} />
-      <MenuItem label="Split Down" icon={<SplitVIcon />} onClick={onSplitDown} ui={ui} />
+      <MenuSection label={isWorkspace ? 'Add Pane' : 'Split'} ui={ui} />
+      <MenuItem label={isWorkspace ? 'Add Pane Right' : 'Split Right'} icon={<SplitHIcon />} onClick={onSplitRight} ui={ui} />
+      <MenuItem label={isWorkspace ? 'Add Pane Below' : 'Split Down'} icon={<SplitVIcon />} onClick={onSplitDown} ui={ui} />
+      {isWorkspace && <MenuItem label="Equalize" icon={<EqualizeIcon />} onClick={onEqualize} ui={ui} />}
       <MenuDivider ui={ui} />
       <MenuItem label="Close Tab" icon={<CloseIcon />} onClick={onCloseTab} ui={ui} danger />
     </div>
@@ -468,4 +509,7 @@ function FullscreenIcon() {
 }
 function CloseIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
+}
+function EqualizeIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="8" x2="21" y2="8"/><line x1="3" y1="16" x2="21" y2="16"/></svg>
 }
