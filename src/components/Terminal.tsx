@@ -10,6 +10,18 @@ import { useStore } from '../hooks'
 import { zoomFontSize, resetFontSize, createTab, getState, setState } from '../store'
 import { Snippet, TerminalTheme } from '../types'
 
+// SFX assets — imported so Vite bundles them into dist/assets/ with correct paths in prod
+import sfxEnter1 from '../assets/sfx/enter_1.wav'
+import sfxEnter2 from '../assets/sfx/enter_2.wav'
+import sfxEnter3 from '../assets/sfx/enter_3.wav'
+import sfxAwait1 from '../assets/sfx/await_1.wav'
+import sfxAwait2 from '../assets/sfx/await_2.wav'
+import sfxAwait3 from '../assets/sfx/await_3.wav'
+import sfxAwait4 from '../assets/sfx/await_4.wav'
+
+const ENTER_SRCS = [sfxEnter1, sfxEnter2, sfxEnter3]
+const AWAIT_SRCS = [sfxAwait1, sfxAwait2, sfxAwait3, sfxAwait4]
+
 interface Props {
   sessionId: string
   isActive: boolean
@@ -122,13 +134,8 @@ export default function TerminalView({ sessionId, isActive }: Props) {
     }
 
     const [e1, e2, e3, a1, a2, a3, a4] = await Promise.all([
-      load('/sfx/enter_1.wav'),
-      load('/sfx/enter_2.wav'),
-      load('/sfx/enter_3.wav'),
-      load('/sfx/await_1.wav'),
-      load('/sfx/await_2.wav'),
-      load('/sfx/await_3.wav'),
-      load('/sfx/await_4.wav'),
+      ...ENTER_SRCS.map(load),
+      ...AWAIT_SRCS.map(load),
     ])
 
     enterBuffersRef.current = [e1, e2, e3].filter(Boolean) as AudioBuffer[]
