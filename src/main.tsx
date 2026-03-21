@@ -5,9 +5,7 @@ import w95faUrl from './assets/W95FA.otf'
 import falloutyUrl from './assets/r_fallouty.ttf'
 import ibm3270Url from './assets/3270-Regular.woff'
 import dosVgaUrl from './assets/PerfectDOSVGA437.woff'
-import dosVgaWinUrl from './assets/PerfectDOSVGA437Win.woff'
 import c64Url from './assets/Commodore64.woff'
-import c64RoundedUrl from './assets/Commodore64Rounded.woff'
 import vt323Url from './assets/VT323-Regular.ttf'
 
 const globalStyle = document.createElement('style')
@@ -37,22 +35,10 @@ globalStyle.textContent = `
   src: url('${dosVgaUrl}') format('woff');
 }
 @font-face {
-  font-family: 'Perfect DOS VGA 437 Win';
-  font-style: normal;
-  font-weight: 400;
-  src: url('${dosVgaWinUrl}') format('woff');
-}
-@font-face {
   font-family: 'Commodore 64';
   font-style: normal;
   font-weight: 400;
   src: url('${c64Url}') format('woff');
-}
-@font-face {
-  font-family: 'Commodore 64 Rounded';
-  font-style: normal;
-  font-weight: 400;
-  src: url('${c64RoundedUrl}') format('woff');
 }
 @font-face {
   font-family: 'VT323';
