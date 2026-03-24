@@ -8,7 +8,7 @@ export default function SettingsPanel() {
   const { settingsOpen, theme, settings, aiStatus } = useStore()
   const ui = theme.ui
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings)
-  const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'ai'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'ai' | 'shortcuts'>('general')
   const [themeSearch, setThemeSearch] = useState('')
   const [scalePreview, setScalePreview] = useState<number | null>(null)
   const [updateCheckStatus, setUpdateCheckStatus] = useState<'idle' | 'checking' | 'latest' | 'error'>('idle')
@@ -51,6 +51,7 @@ export default function SettingsPanel() {
     { id: 'general' as const, label: 'General' },
     { id: 'appearance' as const, label: 'Appearance' },
     { id: 'ai' as const, label: 'AI' },
+    { id: 'shortcuts' as const, label: 'Shortcuts' },
   ]
 
   return (
@@ -70,8 +71,8 @@ export default function SettingsPanel() {
         onClick={e => e.stopPropagation()}
         data-win98-exempt
         style={{
-          width: 520,
-          maxHeight: '80vh',
+          width: 560,
+          maxHeight: '85vh',
           background: ui.bgSecondary,
           border: `1px solid ${ui.border}`,
           borderRadius: 12,
@@ -370,6 +371,8 @@ export default function SettingsPanel() {
               ui={ui}
             />
           )}
+
+          {activeTab === 'shortcuts' && <ShortcutsTab ui={ui} />}
         </div>
       </div>
     </div>
@@ -711,6 +714,107 @@ function AiTab({ localSettings, aiStatus, save, ui }: {
           />
         </div>
       </SettingRow>
+    </div>
+  )
+}
+
+const SHORTCUT_SECTIONS: { title: string; items: { keys: string; description: string }[] }[] = [
+  {
+    title: 'App',
+    items: [
+      { keys: 'F11', description: 'Toggle fullscreen (hide chrome + OS fullscreen)' },
+      { keys: 'Esc', description: 'Exit focus / fullscreen / Zen mode (when no other modal is open)' },
+      { keys: 'Ctrl+R', description: 'Open command history search' },
+      { keys: 'Ctrl+Shift+T', description: 'New tab' },
+      { keys: 'Ctrl+B', description: 'Toggle side panel (hosts, snippets, logs, …)' },
+    ],
+  },
+  {
+    title: 'Terminal',
+    items: [
+      { keys: 'Ctrl+Shift+C', description: 'Copy selected text to clipboard' },
+      { keys: 'Ctrl+Shift+V', description: 'Paste from clipboard into the shell' },
+      { keys: 'Ctrl+V', description: 'Paste (standard terminal input, if supported)' },
+      { keys: 'Ctrl+scroll', description: 'Zoom terminal font size in or out' },
+      { keys: 'Ctrl+Plus / Ctrl+Minus', description: 'Zoom font in / out' },
+      { keys: 'Ctrl+0', description: 'Reset terminal font size to your setting' },
+      { keys: 'Shift+Tab', description: 'Open AI natural-language prompt (when AI is enabled)' },
+      { keys: 'Right-click', description: 'Context menu: copy, paste, snippets' },
+    ],
+  },
+  {
+    title: 'Command history (Ctrl+R)',
+    items: [
+      { keys: 'Esc', description: 'Close history' },
+      { keys: '↑ / ↓', description: 'Move selection' },
+      { keys: 'Enter', description: 'Insert selected line into the active terminal' },
+    ],
+  },
+  {
+    title: 'Side panel',
+    items: [
+      { keys: 'Esc', description: 'Close panel (when history, settings, or SFTP are not focused)' },
+    ],
+  },
+]
+
+function ShortcutsTab({ ui }: { ui: any }) {
+  const kbdStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 0,
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+    fontSize: 11,
+    fontWeight: 500,
+    color: ui.text,
+    background: ui.bgTertiary,
+    border: `1px solid ${ui.border}`,
+    borderRadius: 4,
+    padding: '3px 8px',
+    whiteSpace: 'nowrap',
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <p style={{ fontSize: 12, color: ui.textMuted, margin: 0, lineHeight: 1.5 }}>
+        Reference for built-in shortcuts. Modifiers are listed as <strong style={{ color: ui.text }}>Ctrl</strong>; on macOS, use the same{' '}
+        <strong style={{ color: ui.text }}>Ctrl</strong> key combinations as in the app.
+      </p>
+      {SHORTCUT_SECTIONS.map(section => (
+        <div key={section.title}>
+          <h3 style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color: ui.textMuted,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            margin: '0 0 10px 0',
+            borderBottom: `1px solid ${ui.border}`,
+            paddingBottom: 6,
+          }}>
+            {section.title}
+          </h3>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {section.items.map(row => (
+              <li
+                key={row.keys + row.description}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 12,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span style={kbdStyle}>{row.keys}</span>
+                <span style={{ fontSize: 13, color: ui.text, lineHeight: 1.45, flex: 1, minWidth: 160 }}>
+                  {row.description}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
   )
 }

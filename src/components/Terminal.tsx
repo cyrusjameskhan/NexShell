@@ -609,6 +609,18 @@ export default function TerminalView({ sessionId, isActive }: Props) {
       scheduleFlush()
     })
 
+    // Flag to suppress the native paste event that Electron fires alongside Ctrl+Shift+V,
+    // which would cause xterm's onData to write the clipboard text a second time.
+    let suppressNextPaste = false
+    const onPasteSuppressor = (e: Event) => {
+      if (suppressNextPaste) {
+        e.stopImmediatePropagation()
+        e.preventDefault()
+        suppressNextPaste = false
+      }
+    }
+    containerRef.current.addEventListener('paste', onPasteSuppressor, true)
+
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true
       if (e.key === 'F11') return false
@@ -624,6 +636,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
       }
       // Ctrl+Shift+V → paste from clipboard into PTY
       if (e.ctrlKey && e.shiftKey && e.key === 'V') {
+        suppressNextPaste = true
         navigator.clipboard.readText().then(text => {
           if (text) window.api.writePty(sessionId, text)
         }).catch(() => {})
@@ -773,6 +786,7 @@ export default function TerminalView({ sessionId, isActive }: Props) {
       removeDragScroll()
       removeDataListener()
       removeExitListener()
+      containerRef.current?.removeEventListener('paste', onPasteSuppressor, true)
       containerRef.current?.removeEventListener('contextmenu', onContextMenu)
       containerRef.current?.removeEventListener('wheel', onWheel)
       window.removeEventListener('keydown', onKeyDown)
